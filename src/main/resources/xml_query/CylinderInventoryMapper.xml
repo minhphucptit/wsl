@@ -1,0 +1,141 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.CylinderInventoryMapper">
+
+    <select id="getList" resultMap="result" parameterType="map">
+declare @data table
+(
+    cylinder_category DECIMAL(19,2),
+    factory_name nvarchar(255),
+    inventory DECIMAL(19,2),
+    product_status_name nvarchar(255)
+)
+
+declare @result table
+(
+    cylinder_category DECIMAL(19,2),
+    factory_name nvarchar(255),
+    inventory DECIMAL(19,2),
+    product_status_name nvarchar(255)
+)
+
+insert into @data
+SELECT b.cylinder_category as cylinder_category,
+    c.name as factory_name,
+    isnull(a.inventory,0) as inventory,
+    isnull(d.name,N'Không xác định') as product_status_name
+FROM goods_inventory a
+    LEFT JOIN
+    product b ON a.product_id = b.id AND a.factory_id=b.factory_id
+    LEFT JOIN
+    factory c ON a.factory_id = c.id
+    LEFT JOIN
+    product_status d ON a.product_status_id = d.id
+    JOIN 
+    (SELECT 
+        max(i.voucher_at) voucher_at, i.factory_id
+    FROM 
+        inventory_voucher i
+    LEFT JOIN 
+        goods_inventory g ON i.id = g.voucher_id
+    WHERE 
+        i.voucher_at &lt;= #{voucher_at_to} and g.product_type = 'VO' 
+    GROUP BY 
+        i.factory_id) e on e.voucher_at=a.voucher_at and e.factory_id=a.factory_id
+WHERE a.product_type = 'VO' 
+
+insert into @result
+select 
+    cylinder_category, factory_name, sum(isnull(inventory,0)) as inventory, product_status_name
+from 
+    @data
+GROUP BY cylinder_category, product_status_name, factory_name
+
+insert into @result
+select 
+    cylinder_category, factory_name, sum(isnull(inventory,0)) as inventory, N'Tổng' as product_status_name
+from 
+    @data
+GROUP BY cylinder_category, factory_name
+
+insert into @result
+select 
+    cylinder_category, factory_name, sum(isnull(inventory,0)) as inventory,  N'Tổng theo sổ sách' as product_status_name
+FROM
+(select 
+    b.cylinder_category, c.name factory_name, isnull(inventory,0) as inventory
+from 
+    goods_in_stock a
+left join 
+    product b on a.product_id=b.id and a.factory_id=b.factory_id
+LEFT JOIN
+    factory c ON a.factory_id = c.id
+where
+    a.[year]= year(#{voucher_at_to} AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time') and b.[type]='VO'
+
+union ALL
+
+select 
+    b.cylinder_category, c.name factory_name, a.in_quantity- a.out_quantity as inventory
+from 
+    goods_in_out a
+left join 
+    product b on a.product_id=b.id and a.factory_id=b.factory_id
+LEFT JOIN
+    factory c ON a.factory_id = c.id
+where
+    b.[type]='VO' and a.voucher_at BETWEEN DATEtimeFROMPARTS(year(#{voucher_at_to} AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time'),1,1,0,0,0,0) AT TIME ZONE 'SE Asia Standard Time' AT TIME ZONE 'UTC' and #{voucher_at_to}) asd
+group by 
+    cylinder_category, factory_name    
+    
+insert into @result
+select
+    cylinder_category,  concat(max(customer_name),' - ',company), sum(isnull(inventory,0)) as inventory, N'Tổng theo sổ sách' as product_status_name
+FROM
+    (   select
+            b.cylinder_category,  a.name as customer_name ,a.company_id as company, isnull(inventory,0) as inventory,a.code as code
+        from
+            customer a
+            LEFT JOIN (select a.inventory, b.cylinder_category, a.customer_id
+            from beginning_cylinder_debt a left join product b ON a.product_id = b.id and a.factory_id = b.factory_id
+            where a.[year]= year(#{voucher_at_to} AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time') and b.[type]='VO' ) b
+            ON a.id = b.customer_id
+        WHERE a.category = 'DVSUACHUA'
+
+
+    union ALL
+        select
+            b.cylinder_category, a.name as customer_name ,a.company_id as company, isnull(inventory,0) as inventory,a.code as code
+        from
+            customer a
+            LEFT JOIN (select (a.out_quantity - a.in_quantity) as inventory, b.cylinder_category, a.customer_id
+            from cylinder_debt a left join product b ON a.product_id = b.id and a.factory_id = b.factory_id
+            where b.[type]='VO' and a.voucher_at BETWEEN DATEtimeFROMPARTS(year( #{voucher_at_to} AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time'),1,1,0,0,0,0) AT TIME ZONE 'SE Asia Standard Time' AT TIME ZONE 'UTC' and #{voucher_at_to} ) b
+            ON a.id = b.customer_id
+        WHERE a.category = 'DVSUACHUA' 
+    ) asd
+group by 
+    cylinder_category, company,code    
+    
+insert into @result
+select 
+    cylinder_category, N'Tổng', sum(isnull(inventory,0)) as inventory, product_status_name
+from 
+    @result
+GROUP BY cylinder_category, product_status_name
+
+select * from @result
+order by cylinder_category, case product_status_name when N'Tổng theo sổ sách' then 2 when N'Tổng' then 1 else 0 end, product_status_name, 
+case when factory_name = N'Tổng' then 1 else 0 end,   factory_name
+</select>
+    
+    <resultMap id="result" type="com.ceti.wholesale.dto.CylinderInventoryDto">
+        <result property="weight" column="cylinder_category"/>
+        <result property="factoryName" column="factory_name"/>
+        <result property="inventory" column="inventory"/>
+       	<result property="productStatusName" column="product_status_name"/>
+    </resultMap>
+    
+
+</mapper>

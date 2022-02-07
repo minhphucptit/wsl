@@ -1,0 +1,35 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.MoneyInStockMapper">
+    <select id="setForwardToNextYear" resultType="Integer">
+		DELETE money_in_stock WHERE [year]=#{year_to}
+		INSERT INTO money_in_stock([year], inventory, note, factory_id, id, create_at, update_at, create_by, update_by)
+		SELECT #{year_to},SUM(inventory),N'Hệ thống kết chuyển ngày '+ CONVERT(VARCHAR,GETDATE(),3),#{factory_id},CONCAT(CONVERT(VARCHAR,#{year_to}),'-', #{factory_id}), GETDATE(),GETDATE(),#{user_full_name},#{user_full_name}
+		FROM(
+				SELECT
+					ISNULL(SUM(inventory),0) AS inventory
+				FROM
+					money_in_stock
+				WHERE
+					#{year_from} = [year] AND factory_id=#{factory_id}
+				UNION ALL
+				SELECT
+					ISNULL(SUM(collect_money),0) - ISNULL(SUM(spend_money),0) AS inventory
+				FROM
+					customer_receipt_payment_voucher crpv
+				WHERE
+					YEAR([dbo].[v1/get_date_at_ICT_zone](crpv.voucher_at))=#{year_from}
+				AND  crpv.factory_id = #{factory_id}
+				UNION ALL
+				SELECT
+					ISNULL(SUM(total_payment_received),0) as inventory
+				FROM
+					payment_voucher pv
+				WHERE
+					YEAR([dbo].[v1/get_date_at_ICT_zone](pv.voucher_at))=#{year_from}
+				AND  pv.factory_id = #{factory_id}
+			) a
+
+    </select>
+</mapper>

@@ -1,0 +1,28 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.GasFillingQuantityByFactoryMapper">
+    <select id="getList" resultMap="result" parameterType="map">
+        SELECT
+            SUM(in_quantity*weight) AS total_quantity,
+            factory_id
+        FROM goods_in_out
+        WHERE type='NKSX'
+            <if test="date_from != null">
+                AND voucher_at <![CDATA[>=]]> #{date_from}
+            </if>
+            <if test="date_to != null">
+                AND voucher_at <![CDATA[<=]]> #{date_to}
+            </if>
+            <if test="factory_id != null">
+                AND factory_id = #{factory_id}
+            </if>
+            AND product_type='GAS'
+        GROUP BY factory_id
+    </select>
+
+    <resultMap id="result" type="com.ceti.wholesale.dto.GasFillingQuantityByFactoryDto">
+        <result property="totalQuantity" column="total_quantity"/>
+        <result property="factoryId" column="factory_id"/>
+    </resultMap>
+</mapper>

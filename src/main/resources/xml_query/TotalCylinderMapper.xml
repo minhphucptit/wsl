@@ -1,0 +1,153 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.TotalCylinderMapper">
+
+    <select id="getList" resultMap="result" parameterType="map">
+declare @data table
+(
+    cylinder_category DECIMAL(19,2),
+    brand NVARCHAR(255),
+    color NVARCHAR(32),
+    inventory DECIMAL(19,2),
+    product_status_name nvarchar(255)
+)
+
+declare @result table
+(
+    cylinder_category DECIMAL(19,2),
+    brand NVARCHAR(255),
+    color NVARCHAR(32),
+    inventory DECIMAL(19,2),
+    product_status_name nvarchar(255)
+)
+
+insert into @result
+select 
+    case cylinder_category when 4 then 64 when 6 then 64 else cylinder_category end,brand,color, sum(isnull(inventory,0)) as inventory,  'TSVT' as product_status_name
+FROM
+(select 
+    b.cylinder_category, e.name color, d.name brand, isnull(inventory,0) as inventory
+from 
+    goods_in_stock a
+ join 
+    product b on a.product_id=b.id and a.factory_id=b.factory_id
+ JOIN
+    brand d ON b.brand_id = d.id
+ JOIN 
+    color e ON b.color_id = e.id
+where
+    a.[year]= year(#{voucher_at_to} AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time') and b.[type]='VO'
+
+union ALL
+
+select 
+    b.cylinder_category, e.name color, d.name brand , a.in_quantity- a.out_quantity as inventory
+from 
+    goods_in_out a
+ join 
+    product b on a.product_id=b.id and a.factory_id=b.factory_id
+ JOIN
+    brand d ON b.brand_id = d.id
+ JOIN 
+    color e ON b.color_id = e.id
+where
+    b.[type]='VO' and a.voucher_at BETWEEN dbo.get_first_day_of_year(#{voucher_at_to}) and #{voucher_at_to}) asd
+group by 
+    cylinder_category,brand, color
+
+insert into @data
+SELECT b.cylinder_category as cylinder_category,
+    e.name color, f.name brand,
+    isnull(a.inventory,0) as inventory,
+    isnull(d.code,N'Không xác định') as product_status_name
+FROM goods_inventory a
+     JOIN
+    product b ON a.product_id = b.id and a.factory_id = b.factory_id
+     JOIN
+    brand f ON b.brand_id = f.id
+     JOIN 
+    color e ON b.color_id = e.id
+     JOIN
+    product_status d ON a.product_status_id = d.id
+    JOIN 
+    (SELECT 
+        max(i.voucher_at) voucher_at, i.factory_id
+    FROM 
+        inventory_voucher i
+     JOIN 
+        goods_inventory g ON i.id = g.voucher_id
+    WHERE 
+        i.voucher_at &lt;= #{voucher_at_to} and g.product_type = 'VO' 
+    GROUP BY 
+        i.factory_id) g on g.voucher_at=a.voucher_at and g.factory_id=a.factory_id
+WHERE a.product_type = 'VO'    
+
+INSERT INTO @result SELECT
+                    case cylinder_category when 4 then 64 when 6 then 64 else cylinder_category end, color, brand , sum(isnull(inventory,0)), product_status_name
+                    from @data WHERE product_status_name in ('SD','CBD') GROUP by cylinder_category, color, brand,product_status_name
+
+INSERT INTO @result SELECT
+                    case cylinder_category when 4 then 64 when 6 then 64 else cylinder_category end, color, brand , sum(isnull(inventory,0)), 'TL' as product_status_name
+                    from @data WHERE product_status_name in ('HUY','CHUY') GROUP by cylinder_category, color, brand,product_status_name
+
+
+
+INSERT INTO @result SELECT case cylinder_category when 4 then 64 when 6 then 64 else cylinder_category end,  brand,  color ,  sum(inventory), product_status_name 
+                   from (select 
+                    b.cylinder_category , d.name as color, c.name as brand , (isnull(a.out_quantity - a.in_quantity,0)) as inventory, 'VDVSC' as product_status_name
+                    FROM cylinder_debt a
+                    JOIN customer e ON a.customer_id = e.id and e.category = 'DVSUACHUA'
+                     JOIN product b ON a.product_id = b.id and a.factory_id = b.factory_id
+                     JOIN brand c ON b.brand_id = c.id
+                     JOIN color d ON b.color_id = d.id 
+                    WHERE  a.voucher_at BETWEEN dbo.get_first_day_of_year(#{voucher_at_to}) and #{voucher_at_to}
+                    
+                    UNION ALL 
+                    select b.cylinder_category, d.name as color, c.name as brand , isnull(a.inventory,0) as inventory, 'VDVSC' as product_status_name
+                    FROM beginning_cylinder_debt a
+                    JOIN customer e ON a.customer_id = e.id and e.category = 'DVSUACHUA' 
+                     JOIN product b ON a.product_id = b.id and a.factory_id = b.factory_id
+                     JOIN brand c ON b.brand_id = c.id
+                     JOIN color d ON b.color_id = d.id 
+                    Where a.[year]= year(#{voucher_at_to} AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time')
+                    ) asd GROUP by cylinder_category, brand,color,product_status_name
+                     
+                    
+INSERT INTO @result SELECT case cylinder_category when 4 then 64 when 6 then 64 else cylinder_category end,  brand,  color ,  sum(inventory), product_status_name 
+                   from (select 
+                    b.cylinder_category, d.name as color, c.name as brand , (isnull(a.out_quantity - a.in_quantity,0)) as inventory, 'VKDVSC' as product_status_name
+                    FROM cylinder_debt a
+                    JOIN customer e ON a.customer_id = e.id and e.category != 'DVSUACHUA'
+                     JOIN product b ON a.product_id = b.id and a.factory_id = b.factory_id
+                     JOIN brand c ON b.brand_id = c.id
+                     JOIN color d ON b.color_id = d.id 
+                    WHERE a.voucher_at BETWEEN dbo.get_first_day_of_year(#{voucher_at_to})  and #{voucher_at_to}
+                    
+                    UNION ALL 
+                    select b.cylinder_category, d.name as color, c.name as brand , isnull(a.inventory,0) as inventory, 'VKDVSC' as product_status_name
+                    FROM beginning_cylinder_debt a
+                    JOIN customer e ON a.customer_id = e.id and e.category != 'DVSUACHUA'
+                     JOIN product b ON a.product_id = b.id and a.factory_id = b.factory_id
+                     JOIN brand c ON b.brand_id = c.id
+                     JOIN color d ON b.color_id = d.id 
+                    Where a.[year]= year(#{voucher_at_to} AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time') 
+                    ) asd GROUP by cylinder_category, brand,color,product_status_name
+
+select  cylinder_category ,
+    brand,
+    isnull(color,N'Không xác định') color,
+    inventory ,
+    product_status_name  from @result  ORDER BY brand,color  
+</select>
+    
+    <resultMap id="result" type="com.ceti.wholesale.dto.TotalCylinderDto">
+        <result property="weight" column="cylinder_category"/>
+        <result property="brand" column="brand"/>
+        <result property="color" column="color"/>
+        <result property="inventory" column="inventory"/>
+       	<result property="productStatusName" column="product_status_name"/>
+    </resultMap>
+    
+
+</mapper>

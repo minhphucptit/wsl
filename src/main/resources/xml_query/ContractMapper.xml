@@ -1,0 +1,102 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.ContractMapper">
+    <sql id="filter">
+		<where>
+			<if test="sign_date_from != null">
+				AND c1.sign_date <![CDATA[>=]]> #{sign_date_from}
+			</if>
+			<if test="sign_date_to != null">
+				AND c1.sign_date <![CDATA[<=]]> #{sign_date_to}
+			</if>
+			<if test="expire_date_from != null">
+				AND c1.expire_date <![CDATA[>=]]> #{expire_date_from}
+			</if>
+			<if test="expire_date_to != null">
+				AND c1.expire_date <![CDATA[<=]]> #{expire_date_to}
+			</if>
+			
+			<if test="status != null">
+				AND c1.status = #{status}
+			</if>
+			<if test="contract_category_id != null">
+				AND c1.contract_category_id = #{contract_category_id}
+			</if>
+			<if test="customer_id != null">
+				AND c1.customer_id = #{customer_id}
+			</if>
+			<if test="factory_id != null">
+				AND c1.factory_id = #{factory_id} 
+			</if>
+			<if test="delivery_method != null">
+				AND c1.delivery_method = #{delivery_method}
+			</if>
+			<if test="contract_number != null">
+				AND c1.contract_number LIKE CONCAT('%', #{contract_number}, '%') 
+			</if>
+		</where>
+	</sql>
+
+    <select id="getList" resultMap="result" parameterType="map">
+	    SELECT 
+			c1.id,
+			c1.contract_number,
+			c1.contract_category_id,
+			c1.sign_date,
+			c1.expire_date,
+			c1.delivery_method,
+			c1.payment_method,
+			c1.status,
+			c1.note,
+			c1.factory_id,
+			c1.customer_id,
+			c1.payment_term,
+			c2.code AS customer_code,
+			c2.name AS customer_name,
+			c2.address AS customer_address,
+			cc.name AS contract_category_name,
+			cc.is_active AS contract_category_active
+		FROM contract c1
+		LEFT JOIN customer c2 ON c1.customer_id = c2.id 
+		LEFT JOIN contract_category cc ON c1.contract_category_id = cc.id 
+		<include refid="filter"></include>
+		${pagingStr}
+    </select>
+    
+    <resultMap id="result" type="com.ceti.wholesale.dto.ContractDto">
+        <result property="id" column="id"/>
+        <result property="contractNumber" column="contract_number"/>
+        <result property="contractCategoryId" column="contract_category_id"/>
+        <result property="signDate" column="sign_date"/>
+        <result property="expireDate" column="expire_date"/>
+        <result property="deliveryMethod" column="delivery_method"/>
+        <result property="paymentMethod" column="payment_method"/>
+        <result property="status" column="status"/>
+        <result property="note" column="note"/>
+        <result property="factoryId" column="factory_id"/>
+        <result property="customerId" column="customer_id"/>
+        <result property="paymentTerm" column="payment_term"/>
+        <association property="customer" javaType="com.ceti.wholesale.dto.CustomerDto">
+        	<result property="id" column="customer_id"/>
+        	<result property="code" column="customer_code"/>
+        	<result property="name" column="customer_name"/>
+        	<result property="address" column="customer_address"/>
+        </association>
+        <association property="contractCategory" javaType="com.ceti.wholesale.dto.ContractCategoryDto">
+        	<result property="id" column="contract_category_id"/>
+        	<result property="name" column="contract_category_name"/>
+        	<result property="isActive" column="contract_category_active"/>
+        </association>
+    </resultMap>
+    
+    
+    
+    <select id="countList" resultType="long">
+		SELECT DISTINCT
+			COUNT(c1.id)
+		FROM contract c1
+		<include refid="filter"></include>
+    </select>
+
+</mapper>

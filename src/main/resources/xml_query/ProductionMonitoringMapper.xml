@@ -1,0 +1,381 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.ProductionMonitoringMapper">
+	<sql id="filter">
+	    
+		<where>
+			<if test="customer_id != null">
+				AND customer_id = #{customer_id}
+			</if>
+			<if test="voucher_at_from != null ">
+				AND voucher_at >= #{voucher_at_from}
+			</if>
+			<if test="voucher_at_to != null ">
+				AND voucher_at &lt;= #{voucher_at_to}
+			</if>
+		</where>
+	</sql>
+	
+	<sql id="filter2">
+	    
+		<where>
+		        AND customer_id is not null AND product_type = 'GAS'
+		        AND out_quantity > 0
+			<if test="customer_code != null">
+				AND c.code = #{customer_code}
+			</if>
+			<if test="voucher_at_from != null ">
+				AND voucher_at >= #{voucher_at_from}
+			</if>
+			<if test="voucher_at_to != null ">
+				AND voucher_at &lt;= #{voucher_at_to}
+			</if>
+		</where>
+	</sql>
+
+    <select id="getList" resultMap="result" parameterType="map">
+	    SELECT 
+			production_monitoring.quantity,
+			production_monitoring.voucher_at,
+			production_monitoring.customer_id,
+			customer.code AS customer_code,
+			customer.name AS customer_name
+		FROM 
+			production_monitoring 
+		LEFT JOIN
+			customer ON production_monitoring.customer_id = customer.id
+		<include refid="filter"></include>
+		${page}
+    </select>
+    
+    <select id="getListFromWholesaleData" resultMap="result" parameterType="map">
+	    SELECT 
+			sum(out_quantity*gio.weight) quantity, 
+			voucher_at, 
+			c.code as customer_code, 
+			max(c.name) customer_name		
+			FROM 
+			goods_in_out gio 
+		LEFT JOIN
+			customer c ON gio.customer_id = c.id
+			
+		<include refid="filter2"></include>
+		GROUP BY c.code, voucher_at
+        ORDER BY c.code, voucher_at
+    </select>
+    
+    <select id="getStatistic" parameterType="map" resultMap="resultStatistic, resultStatistic" statementType="CALLABLE">
+        DECLARE @table_data_customer TABLE (
+ 		    customer_code NVARCHAR(64),
+    	    customer_name NVARCHAR(255),
+    		company_id VARCHAR(64),
+    		customer_category VARCHAR(64),
+    		region NVARCHAR(255),
+    		voucher_at DATETIME,
+    		quantity DECIMAL(19,2),
+    		total_quantity DECIMAL(19,2),
+    		last_month_total_quantity DECIMAL(19,2),
+    		target_quantity DECIMAL(19,2)
+		)
+
+        DECLARE @total_reference_customer_id TABLE (
+            customer_id VARCHAR(32),
+ 		    customer_code NVARCHAR(64),
+    	    customer_name NVARCHAR(255),
+    		company_id VARCHAR(64),
+    		customer_category VARCHAR(64),
+    		region_id VARCHAR(32),
+    		region NVARCHAR(255),
+    		total_quantity DECIMAL(19,2),
+    		last_month_total_quantity DECIMAL(19,2),
+    		target_quantity DECIMAL(19,2)
+		)
+
+        DECLARE @total_reference_customer_code TABLE (
+ 		    customer_code NVARCHAR(64),
+    	    customer_name NVARCHAR(255),
+    		company_id VARCHAR(64),
+    		customer_category VARCHAR(64),
+    		region_id VARCHAR(32),
+    		region NVARCHAR(255),
+    		total_quantity DECIMAL(19,2),
+    		last_month_total_quantity DECIMAL(19,2),
+    		target_quantity DECIMAL(19,2)
+		)
+
+        DECLARE @table_data_group TABLE (
+    		company_id NVARCHAR(64),
+    		customer_category NVARCHAR(64),
+    		region NVARCHAR(255),
+    		quantity DECIMAL(19,2),
+    		total_quantity DECIMAL(19,2),
+    		last_month_total_quantity DECIMAL(19,2),
+    		target_quantity DECIMAL(19,2),
+            -- các trường sau dùng để sort total lên đầu nhóm
+            is_total_company bit,  
+            is_total_region bit, 
+            is_total bit,
+            ----------------------------------------------------
+    		voucher_at DATETIME
+		)
+		
+		/*Lấy tổng sl thực hiện, sl tháng trước theo customer id trong bảng production monitoring*/
+        INSERT INTO @total_reference_customer_id(customer_id,customer_code, customer_name,company_id,customer_category,region_id,region,total_quantity,last_month_total_quantity)
+        SELECT 
+            total_this_month.customer_id,
+            customer_tbl.code AS customer_code, 
+            customer_tbl.name AS customer_name,
+            customer_tbl.company_id AS company_id,
+            customer_tbl.category AS customer_category,
+            customer_tbl.region_id AS region,
+            customer_tbl.region_name AS region,
+            isnull(total_this_month.total_quantity,0) total_quantity,
+            isnull(last_month.last_month_total_quantity,0) last_month_total_quantity 
+        FROM
+        (
+            SELECT 
+            customer_id,
+			SUM(isnull(quantity,0)) as total_quantity
+		    FROM production_monitoring 
+            WHERE voucher_at BETWEEN #{voucher_at_from} and #{voucher_at_to}          
+            GROUP BY customer_id
+        ) total_this_month
+
+        LEFT JOIN 
+        (
+            SELECT 
+			customer_id, SUM(isnull(quantity,0)) as last_month_total_quantity
+		    FROM production_monitoring 
+            WHERE voucher_at BETWEEN DATEADD(month, -1,#{voucher_at_from}) and DATEADD(month, -1,#{voucher_at_to})
+        GROUP BY customer_id
+        ) last_month ON total_this_month.customer_id=last_month.customer_id
+
+        LEFT JOIN
+        (
+         	SELECT 
+                customer.id AS id,
+         		customer.code AS code, 
+         		customer.region_id AS region_id,
+                customer.is_wholesale_customer AS is_wholesale_customer,
+         		MAX(customer.name) AS name,
+         		MAX(ISNULL(region.name, N'(empty)')) AS region_name,
+         		max(customer.company_id) AS company_id,
+                max(customer.owner_company) AS owner_company,
+         		MAX(ISNULL(customer.category, N'(empty)')) AS category
+         	FROM customer
+         	LEFT JOIN region on region.id = customer.region_id 
+            GROUP BY customer.id,customer.code,  customer.region_id, customer.is_wholesale_customer
+        ) customer_tbl ON total_this_month.customer_id = customer_tbl.id 
+        <where>
+		 	<if test="customer_code != null">
+		 		AND customer_tbl.code = #{customer_code}
+		 	</if>
+		 	<if test="region_id != null">
+		 		AND customer_tbl.region_id = #{region_id}
+		 	</if>
+		 	<if test="company_id != null">
+				AND company_id = #{company_id}
+		 	</if>
+            <if test="owner_company != null">
+                AND customer_tbl.owner_company = #{owner_company}
+            </if>
+            <if test="is_wholesale_customer != null">
+                AND customer_tbl.is_wholesale_customer = #{is_wholesale_customer}
+            </if>
+		 	<if test="customer_category != null">
+		 		AND customer_tbl.category = #{customer_category}
+		 	</if>		
+		 </where>
+
+		/*Lấy tổng sản lượng, sl thagns trước, chỉ tiêu theo customer code*/
+        INSERT INTO @total_reference_customer_code(customer_code,customer_name,company_id,customer_category,region_id, region,total_quantity,last_month_total_quantity,target_quantity)
+        SELECT customer_code, customer_name, company_id, customer_category,region_id, region, total_quantity, last_month_total_quantity, target_quantity
+        FROM
+        (
+            SELECT a.*,  target_production.target_quantity
+            FROM 
+            (
+                SELECT customer_code, MAX(customer_name) AS customer_name, company_id,
+                customer_category, region, SUM(total_quantity) AS total_quantity, SUM(last_month_total_quantity) AS last_month_total_quantity,
+                MAX(region_id) AS region_id
+                FROM @total_reference_customer_id
+                GROUP BY customer_code, company_id, customer_category, region
+            ) a
+            <if test="is_target_production != 1 ">
+                LEFT
+            </if>
+            JOIN
+            (
+                SELECT ISNULL(quantity,0) target_quantity, customer_code
+                FROM target_production 
+                WHERE month = month(#{voucher_at_to}) 
+		    ) target_production ON target_production.customer_code = a.customer_code
+        ) b
+
+		/*Tính sản lượng , chỉ tiêu, sl tháng trước theo từng nhóm khách hàng và theo ngày*/
+        INSERT INTO @table_data_customer   
+        SELECT 
+            total.customer_code, total.customer_name, total.company_id, total.customer_category, total.region,
+            this_month.voucher_at, isnull(this_month.quantity,0) quantity, total.total_quantity, total.last_month_total_quantity, total.target_quantity
+        FROM @total_reference_customer_code total
+        LEFT JOIN
+        (
+            SELECT 
+			c.code AS customer_code, p.voucher_at, SUM(ISNULL(p.quantity,0)) AS quantity
+			, MAX(c.company_id) company_id, MAX(c.region_id) region_id,
+            MAX(c.category) AS customer_category
+		    FROM production_monitoring p
+		    LEFT JOIN customer c ON p.customer_id = c.id
+            WHERE p.voucher_at BETWEEN #{voucher_at_from} and #{voucher_at_to}
+            GROUP BY c.code, p.voucher_at
+		) this_month ON total.customer_code = this_month.customer_code
+		AND total.company_id = this_month.company_id
+        AND ( (total.region_id = this_month.region_id) OR (total.region_id is null and this_month.region_id is null) ) AND total.customer_category = this_month.customer_category
+        
+-----------------------------------------------------------------------------------------
+
+		/*Tính sản lượng , chỉ tiêu, sl tháng trước theo nhóm khách hàng, công ty, khu vực và theo ngày*/
+        INSERT INTO @table_data_group
+        SELECT 
+            a.company_id, a.customer_category, a.region, quantity, 
+            total_quantity, last_month_total_quantity, target_quantity, 0,0,0, voucher_at
+        FROM 
+        (
+            SELECT 
+            company_id, customer_category, region, voucher_at, SUM(isnull(quantity,0)) quantity
+            FROM   
+            @table_data_customer
+        	GROUP BY  region, company_id, customer_category, voucher_at
+        ) a 
+        LEFT JOIN
+        (
+            SELECT 
+            region, company_id, customer_category, 
+            SUM(isnull(total_quantity,0)) total_quantity,
+            SUM(isnull(last_month_total_quantity,0)) last_month_total_quantity, 
+            SUM(isnull(target_quantity,0)) target_quantity
+            FROM   
+            @total_reference_customer_code
+            GROUP BY  region, company_id, customer_category
+        ) b on a.customer_category=b.customer_category and a.company_id= b.company_id and a.region = b.region
+        
+-----------------------------------------------------------------------------------------
+
+		/*Tính sản lượng , chỉ tiêu, sl tháng trước theo công ty, khu vực và theo ngày*/
+        INSERT INTO @table_data_group
+        SELECT 
+            a.company_id, concat(N'Tổng SL ',a.company_id,' ',a.region) customer_category, a.region, 
+            a.quantity, b.total_quantity, b.last_month_total_quantity, b.target_quantity, 1,0,0, a.voucher_at
+        FROM 
+        (
+            SELECT 
+            company_id, region, voucher_at, SUM(isnull(quantity,0)) quantity
+            --SUM(isnull(total_quantity,0)) total_quantity,
+            --SUM(isnull(last_month_total_quantity,0)) last_month_total_quantity, 
+            --SUM(isnull(target_quantity,0)) target_quantity
+            FROM @table_data_group
+            GROUP BY region, company_id, voucher_at
+        ) a
+        LEFT JOIN
+        (
+            SELECT 
+            region, company_id, 
+            SUM(isnull(total_quantity,0)) total_quantity,
+            SUM(isnull(last_month_total_quantity,0)) last_month_total_quantity, 
+            SUM(isnull(target_quantity,0)) target_quantity
+            FROM @total_reference_customer_code
+            GROUP BY region, company_id
+        ) b on a.company_id= b.company_id and a.region = b.region 
+
+-----------------------------------------------------------------------------------------
+        
+        /*Tính sản lượng , chỉ tiêu, sl tháng trước theo công ty và theo ngày*/
+        INSERT INTO @table_data_group
+        SELECT 
+            concat(N'Tổng KV ',a.region) company_id, '' customer_category, a.region, 
+            a.quantity, b.total_quantity, b.last_month_total_quantity, b.target_quantity, 0,1,0, a.voucher_at
+        FROM 
+        (
+            SELECT 
+            region, voucher_at, SUM(isnull(quantity,0)) quantity
+            --SUM(isnull(total_quantity,0)) total_quantity,
+            --SUM(isnull(last_month_total_quantity,0)) last_month_total_quantity, 
+            --SUM(isnull(target_quantity,0)) target_quantity
+            FROM @table_data_group
+            WHERE is_total_company = 1
+            GROUP BY  region,  voucher_at
+        ) a 
+        LEFT JOIN
+        (
+        	SELECT region, 
+            SUM(isnull(total_quantity,0)) total_quantity,
+            SUM(isnull(last_month_total_quantity,0)) last_month_total_quantity, 
+            SUM(isnull(target_quantity,0)) target_quantity
+        	FROM @total_reference_customer_code
+        	GROUP BY region 
+        ) b on a.region=b.region
+-----------------------------------------------------------------------------------------
+        
+        /*Tính sản lượng , chỉ tiêu, sl tháng trước theo khu vực và theo ngày*/
+        INSERT INTO @table_data_group
+        SELECT 
+            '' company_id, '' customer_category, N'TỔNG CTY NGUỒN' region, 
+            quantity, total_quantity, last_month_total_quantity, target_quantity, 0,0,1, voucher_at
+        FROM 
+        (
+            SELECT voucher_at, sum(isnull(quantity,0)) quantity
+            FROM @table_data_group
+            WHERE is_total_region = 1
+            GROUP BY voucher_at
+        ) a ,
+        (   
+            SELECT 
+            sum(isnull(total_quantity,0)) total_quantity,
+            sum(isnull(last_month_total_quantity,0)) last_month_total_quantity, 
+            sum(isnull(target_quantity,0)) target_quantity
+            FROM @total_reference_customer_code 
+        ) b 
+
+        SELECT * 
+        FROM @table_data_group 
+        ORDER BY is_total desc,region, is_total_region desc, company_id, is_total_company desc, customer_category, voucher_at
+
+        SELECT * 
+        FROM @table_data_customer
+        ORDER BY customer_code, voucher_at
+    </select>
+    
+    <resultMap id="result" type="com.ceti.wholesale.dto.ProductionMonitoringDto">
+        <result property="quantity" column="quantity"/>
+        <result property="voucherAt" column="voucher_at"/>
+        <result property="customerCode" column="customer_code"/>
+        <result property="customerName" column="customer_name"/>
+        <result property="customerId" column="customer_id"/>
+    </resultMap>
+    
+    <resultMap id="resultStatistic" type="com.ceti.wholesale.dto.plan.ProductionMonitoringStatisticDataDto">
+        <result property="companyId" column="company_id"/>
+        <result property="region" column="region"/>
+        <result property="customerCategory" column="customer_category"/>
+        <result property="voucherAt" column="voucher_at"/>
+        <result property="customerCode" column="customer_code"/>
+        <result property="customerName" column="customer_name"/>
+        <result property="quantity" column="quantity"/>
+        <result property="totalQuantity" column="total_quantity"/>
+        <result property="lastMonthTotalQuantity" column="last_month_total_quantity"/>
+        <result property="targetQuantity" column="target_quantity"/>
+        <result property="isTotalRegion" column="is_total_region"/>  
+        <result property="isTotalCompany" column="is_total_company"/>               
+        <result property="isTotal" column="is_total"/>         
+    </resultMap>
+    
+  <select id="countList" resultType="long">
+		SELECT COUNT(pm.customer_id)
+		FROM 
+			production_monitoring pm LEFT JOIN customer c ON pm.customer_id = c.id
+		<include refid="filter"></include>
+		 
+    </select>
+
+</mapper>

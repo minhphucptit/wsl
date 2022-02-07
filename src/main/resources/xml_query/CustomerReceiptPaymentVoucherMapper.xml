@@ -1,0 +1,98 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.CustomerReceiptPaymentVoucherMapper">
+	<sql id="filter">
+		<where>
+			<if test="factoryId != null">
+				crpv.factory_id = #{factoryId}
+			</if>
+			<if test="voucher_code != null">
+				AND crpv.voucher_code = #{voucher_code}
+			</if>
+			<if test="category != null">
+				AND crpv.category = #{category}
+			</if>
+			<if test="payerMethod != null">
+				AND crpv.payer_method = #{payerMethod}
+			</if>
+			<if test="customerId != null">
+				AND crpv.customer_id = #{customerId}
+			</if>
+			<if test="customerFullName != null">
+				AND crpv.customer_full_name LIKE CONCAT('%', #{customerFullName}, '%') 
+			</if>
+			<if test="payer != null">
+				AND crpv.payer LIKE CONCAT('%', #{payer}, '%')
+			</if>
+		</where>
+	</sql>
+
+    <select id="getList" resultMap="result" parameterType="map">
+	    SELECT
+			crpv.id,
+			crpv.[no],
+			crpv.customer_id,
+			crpv.customer_full_name,
+			crpv.voucher_at,
+			crpv.payer,
+			crpv.payer_method,
+			crpv.address,
+			crpv.reason,
+			crpv.note,
+			crpv.category,
+			crpv.voucher_code,
+			crpv.create_at,
+			crpv.create_by,
+			crpv.update_at,
+			crpv.update_by,
+			crpv.factory_id,
+			crpv.collect_money,
+			crpv.spend_money,
+			c.code AS customer_code
+		FROM 
+			customer_receipt_payment_voucher crpv
+		LEFT JOIN
+			customer c ON crpv.customer_id = c.id 
+		<include refid="filter"></include>
+		ORDER BY crpv.voucher_at DESC
+		OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
+    </select>
+    
+    <resultMap id="result" type="com.ceti.wholesale.dto.CustomerReceiptPaymentVoucherDto">
+        <result property="id" column="id"/>
+        <result property="no" column="no"/>
+        <result property="customerId" column="customer_id"/>
+        <result property="customerFullName" column="customer_full_name"/>
+        <result property="voucherAt" column="voucher_at"/>
+        <result property="payer" column="payer"/>
+        <result property="payerMethod" column="payer_method"/>
+        <result property="address" column="address"/>
+        <result property="reason" column="reason"/>
+        <result property="note" column="note"/>
+        <result property="category" column="category"/>
+        <result property="voucherCode" column="voucher_code"/>
+        <result property="createAt" column="create_at"/>
+        <result property="createBy" column="create_by"/>
+        <result property="updateAt" column="update_at"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="factoryId" column="factory_id"/>
+        <result property="collectMoney" column="collect_money"/>
+        <result property="spendMoney" column="spend_money"/>
+        <association property="customer" javaType="com.ceti.wholesale.dto.CustomerDto">
+        	<result property="code" column="customer_code"/>
+        </association>
+    </resultMap>
+    
+    
+    
+    <select id="countList" resultType="long">
+		SELECT
+			COUNT(crpv.id)
+		FROM 
+			customer_receipt_payment_voucher crpv
+		<include refid="filter"></include>
+		 
+    </select>
+
+</mapper>

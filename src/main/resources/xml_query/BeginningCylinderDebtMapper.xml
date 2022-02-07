@@ -1,0 +1,30 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.BeginningCylinderDebtMapper">
+	<select id="setForwardToNextYear" resultType="Integer" >
+
+		DELETE beginning_cylinder_debt WHERE [year]=#{year_to}
+		INSERT INTO beginning_cylinder_debt(id, [year], customer_id, product_id, create_by, update_by, create_at, update_at, note, inventory, factory_id)
+		SELECT CONCAT(CONVERT(VARCHAR,#{year_to}), customer_id, product_id , #{factory_id}) , #{year_to} , customer_id, product_id,
+			   #{user_full_name},  #{user_full_name}, GETDATE(), GETDATE(), N'Hệ thống kết chuyển ngày '+ CONVERT(VARCHAR,GETDATE(),3),
+			   SUM(quantity) as inventory, #{factory_id}
+		FROM(
+
+				select customer_id,product_id, SUM(in_quantity - out_quantity) as quantity
+				from cylinder_debt
+				where YEAR([dbo].[v1/get_date_at_ICT_zone](voucher_at))=#{year_from}
+				  AND factory_id = #{factory_id}
+				group by product_id, customer_id
+
+				union all
+
+				select customer_id, product_id, SUM(inventory) as quantity
+				from beginning_cylinder_debt bcd
+				WHERE    bcd.[year] = #{year_from}
+				  AND bcd.factory_id = #{factory_id}
+				group by product_id, customer_id
+			) as b
+		GROUP BY product_id, customer_id
+    </select>
+</mapper>

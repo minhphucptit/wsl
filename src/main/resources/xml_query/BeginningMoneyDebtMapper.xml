@@ -1,0 +1,68 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.BeginningMoneyDebtMapper">
+    <select id="setForwardToNextYear" resultType="Integer">
+		DELETE beginning_money_debt WHERE [year]=#{year_to}
+		INSERT INTO beginning_money_debt(id, [year], customer_id, inventory, create_by, update_at, update_by, create_at, note, factory_id)
+		SELECT CONCAT(CONVERT(VARCHAR,#{year_to}), customer_id ,#{factory_id}) ,#{year_to} , customer_id, SUM(goods_money-payment) as inventory,
+		#{user_full_name}, GETDATE(), #{user_full_name}, GETDATE(), N'Hệ thống kết chuyển ngày '+ CONVERT(VARCHAR,GETDATE(),3), #{factory_id}
+		FROM(
+		SELECT
+		md.customer_id AS customer_id, SUM(md.inventory) as goods_money, CONVERT(DECIMAL(19,2),0) as payment
+		FROM
+		beginning_money_debt md
+		WHERE
+		md.[year] =#{year_from} AND md.factory_id = #{factory_id}
+		GROUP BY md.customer_id
+		UNION ALL
+		SELECT
+		sv.customer_id AS customer_id, SUM(sv.total_receivable) as goods_money, CONVERT(DECIMAL(19,2),0) as payment
+		FROM
+		sold_voucher sv
+		WHERE
+		YEAR([dbo].[v1/get_date_at_ICT_zone](sv.voucher_at))=#{year_from} AND  sv.factory_id = #{factory_id}
+		GROUP BY
+		sv.customer_id
+		UNION ALL
+		SELECT
+		sv.customer_id AS customer_id, SUM(sv.total_receivable) as goods_money, CONVERT(DECIMAL(19,2),0) as payment
+		FROM
+		sold_delivery_voucher sv
+		WHERE
+		YEAR([dbo].[v1/get_date_at_ICT_zone](sv.voucher_at))=#{year_from} AND  sv.factory_id = #{factory_id}
+		GROUP BY
+		sv.customer_id
+		UNION ALL
+		SELECT
+		crpv.customer_id AS customer_id, CONVERT(DECIMAL(19,2),0) as goods_money, SUM(crpv.collect_money) as payment
+		FROM
+		customer_receipt_payment_voucher crpv
+		WHERE
+		YEAR([dbo].[v1/get_date_at_ICT_zone](crpv.voucher_at))=#{year_from} AND  crpv.factory_id = #{factory_id}
+		AND crpv.voucher_code ='TH'
+		GROUP BY
+		crpv.customer_id
+		UNION ALL
+		SELECT
+		crpv.customer_id AS customer_id, CONVERT(DECIMAL(19,2),0) as goods_money, -SUM(crpv.spend_money) as payment
+		FROM
+		customer_receipt_payment_voucher crpv
+		WHERE
+		YEAR([dbo].[v1/get_date_at_ICT_zone](crpv.voucher_at))=#{year_from} AND  crpv.factory_id = #{factory_id}
+		AND crpv.voucher_code ='CH'
+		GROUP BY
+		crpv.customer_id
+		UNION ALL
+		SELECT
+		pv.customer_id AS customer_id, CONVERT(DECIMAL(19,2),0) as goods_money, SUM(pv.total_payment_received) as payment
+		FROM
+		payment_voucher pv
+		WHERE
+		YEAR([dbo].[v1/get_date_at_ICT_zone](pv.voucher_at))=#{year_from} AND  pv.factory_id = #{factory_id}
+		GROUP BY
+		pv.customer_id
+		) as b
+		GROUP BY customer_id
+    </select>
+</mapper>

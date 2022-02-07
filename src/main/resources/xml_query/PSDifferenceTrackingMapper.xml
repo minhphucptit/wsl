@@ -1,0 +1,105 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper
+	namespace="com.ceti.wholesale.mapper.PSDifferenceTrackingMapper">
+
+	<select id="getAll" resultMap="result, count_page" parameterType="map">
+		declare @result table(
+		factory_id varchar(32),
+		factory_name nvarchar(255),
+		truck_license_plate_number varchar(32),
+		distance decimal(19,2),
+		gas_follow_gps decimal(19,2),
+		do_bonus decimal(19,2),
+		total_quantity decimal(19,2),
+		quota decimal(19,2),
+		ps_difference decimal(19,2)
+)
+insert into @result
+		select d.id AS factory_id,
+		d.name as factory_name, c.license_plate_number AS truck_license_palte_number, distance, round(distance*quota,0) as gas_follow_gps,
+		round(distance*quota*isnull(do_ratio,0.05),0) as do_boonus, total_quantity, quota,
+		round(distance*quota,0)+ round(distance*quota*isnull(do_ratio,0.05),0) - total_quantity as ps_diffirence
+		FROM
+		truck c 		
+		LEFT JOIN 
+			(SELECT truck_license_plate_number, SUM(quantity) total_quantity, SUM(distance) distance
+			 FROM (
+					  SELECT
+						  truck_license_plate_number, 0 quantity, isnull(distance,0) distance
+					  FROM
+						  truck_distance
+					  WHERE
+						  month(day AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time')= #{month}
+						AND year(day AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time')= #{year}
+					  UNION ALL
+					  SELECT
+						  truck_license_plate_number, isnull(quantity,0), 0 distance
+					  FROM
+						  cost_track_board
+					  WHERE
+						  truck_cost_type_id='XANGDAU' AND month(action_date AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time')= #{month}
+						AND year(action_date AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time')= #{year} AND cost_track_board_type = 'TRUCK'
+				  ) AS a
+			 	GROUP BY truck_license_plate_number) b on b.truck_license_plate_number=c.license_plate_number
+				left join factory d on c.factory_id=d.id
+		<where>
+			<if test="truck_licence_plate_number != null">
+				AND c.license_plate_number = #{truck_licence_plate_number}
+			</if>
+			<if test="factory_id != null">
+				AND d.id =#{factory_id}
+			</if>
+		</where>
+		
+		select r.* , ISNULL(tmfd.final_do,0) AS total_difference_month_before, ISNULL(r.ps_difference,0) + ISNULL(tmfd.final_do,0) AS  total_difference,
+		tmfd2.id AS id, #{month} AS month, #{year} AS year, tmfd2.final_do AS final_do
+		from @result r
+		LEFT JOIN truck_monthly_final_do tmfd ON r.truck_license_plate_number = tmfd.truck_license_plate_number AND r.factory_id = tmfd.factory_id
+		AND tmfd.month = DATEPART(MONTH, DATEADD(MONTH, -1,  datefromparts(#{year}, #{month}, 1))) AND tmfd.year = DATEPART(YEAR, DATEADD(MONTH, -1,  datefromparts(#{year}, #{month}, 1)))
+		LEFT JOIN truck_monthly_final_do tmfd2 ON tmfd2.factory_id = r.factory_id AND tmfd2.month = #{month} AND tmfd2.year = #{year}
+		AND tmfd2.truck_license_plate_number = r.truck_license_plate_number
+        <where>
+            <if test="has_ps_difference == 1">
+                r.ps_difference is not null
+            </if>
+        </where>
+		ORDER BY r.factory_name
+		OFFSET #{page} ROWS FETCH NEXT #{size} ROWS ONLY
+		
+		select COUNT(*) as total_items from @result r
+		LEFT JOIN truck_monthly_final_do tmfd2 ON tmfd2.factory_id = r.factory_id AND tmfd2.month = #{month} AND tmfd2.year = #{year}
+		AND tmfd2.truck_license_plate_number = r.truck_license_plate_number
+        <where>
+            <if test="has_ps_difference == 1">
+                r.ps_difference is not null
+            </if>
+        </where>
+	</select>
+	
+	<resultMap id="result" type="com.ceti.wholesale.dto.PSDifferenceTrackingDto">
+		<result property="factoryId" column="factory_id" />
+		<result property="factoryName" column="factory_name" />
+		<result property="truckLicensePlateNumber" column="truck_license_plate_number" />
+		<result property="quota" column="quota" />
+		<result property="distance" column="distance" />
+		<result property="gasFollowGps" column="gas_follow_gps" />
+		<result property="doBonus" column="do_bonus" />
+		<result property="totalQuantity" column="total_quantity" />
+		<result property="psDifference" column="ps_difference" />
+		<result property="totalDifferenceMonthBefore" column="total_difference_month_before" />
+		<result property="totalDifference" column="total_difference" />
+		<association property="truckMonthlyFinalDo" javaType="com.ceti.wholesale.dto.TruckMonthlyFinalDoDto">
+        	<result property="id" column="id"/>
+        	<result property="month" column="month"/>
+        	<result property="year" column="year"/>
+        	<result property="truckLicensePlateNumber" column="truck_license_plate_number"/>
+        	<result property="factoryId" column="factory_id"/>
+        	<result property="finalDo" column="final_do"/>    	
+        </association>
+	</resultMap>
+	
+	<resultMap id="count_page" type= "Long">
+	</resultMap>
+</mapper>

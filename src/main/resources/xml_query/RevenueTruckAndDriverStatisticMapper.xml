@@ -1,0 +1,124 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper
+	namespace="com.ceti.wholesale.mapper.RevenueTruckAndDriverStatisticMapper">
+	<sql id="filter">
+		<where>
+			<if test="date_from != null">
+				AND voucher_at <![CDATA[>=]]> #{date_from}
+			</if>
+			<if test="date_to != null">
+				AND voucher_at <![CDATA[<=]]> #{date_to}
+			</if>
+			<if test="factory_id != null">
+				AND gio.factory_id = #{factory_id}
+			</if>
+		</where>
+	</sql>
+
+	<select id="getAll" resultMap="result, count" parameterType="map">
+		DECLARE @revenueTruckAndDriver TABLE(
+			gas_quantity decimal(19,2),
+			gas_kg decimal(19,2),
+			gbon_quantity decimal(19,2),
+			truck_or_driver nvarchar(255),
+			factory_name nvarchar(255),
+			factory_id varchar(32),
+			weight DECIMAL(19,2)
+		)
+		
+		
+    	DECLARE @tempTable TABLE(
+         truck_or_driver nvarchar(255),
+         gas_kg decimal(19,2)
+    	)
+    	
+    	DECLARE @start_row int,@end_row int
+    	
+    	SET @start_row = #{page} * #{size};
+		SET @end_row = @start_row + #{size} +1;
+		
+		INSERT INTO @revenueTruckAndDriver 
+		SELECT gas_quantity,gas_kg, gbon_quantity, 
+		
+		<if test="type =='truck_driver'" >
+			c.full_name AS truck_or_driver
+		</if>
+					
+		<if test="type =='truck'" >
+			b.truck_or_driver AS truck_or_driver
+		</if>
+		, d.name AS factory_name, d.id AS factory_id,b.weight
+		FROM (
+		select SUM(gas_quantity) gas_quantity,SUM(gas_kg) gas_kg, SUM(gbon_quantity) gbon_quantity, truck_or_driver, factory_id,max(weight) weight
+			FROM (
+				SELECT out_quantity AS gas_quantity,out_quantity * gio.weight AS gas_kg, 0 gbon_quantity,(p.weight) weight,
+					<if test="type =='truck_driver'" >
+					   truck_driver_id AS truck_or_driver
+					</if>
+					
+					<if test="type =='truck'" >
+						truck_license_plate_number AS truck_or_driver
+					</if>				 
+				 , gio.factory_id factory_id
+				FROM goods_in_out gio
+				JOIN product p ON gio.product_id = p.id and gio.factory_id = p.factory_id
+				<include refid="filter"></include>
+				AND product_type='GAS' AND is_main_product = 1 AND out_quantity > 0
+				
+				UNION ALL
+				
+				SELECT 0 gas_quantity,0 gas_kg, out_quantity * weight AS gbon_quantity, null AS weight,
+					<if test="type =='truck_driver'" >
+					   truck_driver_id AS truck_or_driver
+					</if>
+					
+					<if test="type =='truck'" >
+						truck_license_plate_number AS truck_or_driver
+					</if>
+				, factory_id
+				FROM goods_in_out gio
+				<include refid="filter"></include>
+				AND product_type='GASBON' AND is_main_product=1  AND out_quantity > 0
+			) a
+			GROUP BY truck_or_driver, factory_id
+			<if test ="weight != null">
+				, weight
+			</if>
+		) b
+		<if test="type =='truck_driver'" >
+			JOIN truck_driver c on c.id = b.truck_or_driver
+		</if>
+					
+		<if test="type =='truck'" >
+			JOIN truck c on c.license_plate_number = b.truck_or_driver
+		</if>
+		JOIN factory d on d.id = b.factory_id
+		
+		INSERT into @tempTable select asd.truck_or_driver,asd.gas_kg from (SELECT truck_or_driver,SUM(gas_kg) gas_kg,factory_id 
+		, ROW_NUMBER() OVER (ORDER BY factory_id) as ROW_NUM 
+		FROM @revenueTruckAndDriver  GROUP BY truck_or_driver, factory_id  ) asd 
+		WHERE asd.ROW_NUM BETWEEN @start_row and @end_row
+		
+		SELECT gas_quantity, b.gas_kg, gbon_quantity, a.truck_or_driver AS truck_or_driver , factory_name, factory_id,weight
+		FROM @revenueTruckAndDriver a
+		JOIN @tempTable b ON a.truck_or_driver = b.truck_or_driver
+		ORDER BY factory_id ASC 
+		
+		SELECT COUNT(distinct truck_or_driver)
+		FROM @revenueTruckAndDriver
+	</select>
+	
+	<resultMap id="result" type="com.ceti.wholesale.dto.RevenueTruckAndDriverStatisticDto">
+		<result property="factoryName" column="factory_name" />
+		<result property="gasQuantity" column="gas_quantity" />
+		<result property="gasKg" column="gas_kg" />
+		<result property="gbonQuantity" column="gbon_quantity" />
+		<result property="truckOrDriver" column="truck_or_driver" />
+		<result property="weight" column="weight" />
+	</resultMap>
+	
+	<resultMap id="count" type= "Long">
+	</resultMap>
+</mapper>

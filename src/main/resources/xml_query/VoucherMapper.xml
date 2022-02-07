@@ -1,0 +1,212 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.VoucherMapper">
+    <sql id="filter">
+		<where>
+			<if test="voucher_at_from != null">
+				AND ${tableNameStr}.voucher_at <![CDATA[>=]]> #{voucher_at_from}
+			</if>
+			<if test="voucher_at_to != null">
+				AND ${tableNameStr}.voucher_at <![CDATA[<=]]> #{voucher_at_to}
+			</if>
+			<if test="where.delivery_voucher_no != null">
+				AND ${tableNameStr}.delivery_voucher_no LIKE CONCAT('%', #{where.delivery_voucher_no}, '%')
+			</if>
+			<if test="where.company_id != null">
+				AND ${tableNameStr}.company_id = #{where.company_id}
+			</if>
+			<if test="where.customer_id != null and tableNameStr != 'delivery_voucher' and tableNameStr != 'return_voucher'">
+				AND ${tableNameStr}.customer_id = #{where.customer_id}
+			</if>
+			<if test="where.truck_driver_id != null">
+				AND ${tableNameStr}.truck_driver_id = #{where.truck_driver_id}
+			</if>
+			<if test="where.truck_license_plate_number != null">
+				AND ${tableNameStr}.truck_license_plate_number = #{where.truck_license_plate_number}
+			</if>
+			<if test="where.in_factory != null">
+				AND ${tableNameStr}.in_factory = #{where.in_factory}
+			</if>
+			<if test="where.factory_id != null">
+				AND ${tableNameStr}.factory_id = #{where.factory_id}
+			</if>
+			<if test="where.no != null">
+				AND ${tableNameStr}.no LIKE CONCAT('%', #{where.no}, '%')
+			</if>
+			<if test="where.voucher_code != null">
+				AND ${tableNameStr}.voucher_code LIKE CONCAT('%', #{where.voucher_code}, '%')
+			</if>
+			<if test="where.id != null">
+				AND ${tableNameStr}.id = #{where.id}
+			</if>
+			<if test="where.sold_voucher_no != null">
+				AND ${tableNameStr}.sold_voucher_no LIKE CONCAT('%', #{where.sold_voucher_no}, '%')
+			</if>
+			<if test="where.sold_delivery_voucher_no != null">
+				AND ${tableNameStr}.sold_delivery_voucher_no LIKE CONCAT('%', #{where.sold_delivery_voucher_no}, '%')
+			</if>
+			<if test="where.acc_no != null">
+				AND avc.acc_no LIKE CONCAT('%', #{where.acc_no}, '%')
+			</if>
+			<if test="where.sold_voucher_acc_no != null">
+				AND avc3.acc_no LIKE CONCAT('%', #{where.sold_voucher_acc_no}, '%')
+			</if>
+			<if test="where.sold_delivery_acc_voucher_no != null">
+				AND avc4.acc_no LIKE CONCAT('%', #{where.sold_delivery_acc_voucher_no}, '%')
+			</if>
+			<if test="where.delivery_voucher_acc_no != null">
+				AND avc2.acc_no LIKE CONCAT('%', #{where.delivery_voucher_acc_no}, '%')
+			</if>
+		</where>
+	</sql>
+
+    <select id="getList" resultMap="result" parameterType="map">
+	    SELECT
+			${tableNameStr}.*,
+			avc.acc_no AS acc_no
+			<if test="tableNameStr == 'payment_voucher'">
+				, avc2.acc_no AS delivery_voucher_acc_no
+				, avc3.acc_no AS sold_voucher_acc_no
+				, avc4.acc_no AS sold_delivery_acc_voucher_no
+			</if>
+			<if test="tableNameStr == 'recall_voucher' or tableNameStr == 'return_voucher' or tableNameStr == 'sold_delivery_voucher'">
+				, avc2.acc_no AS delivery_voucher_acc_no
+			</if>
+			, c1.name as company_name,
+		   <if test="tableNameStr != 'delivery_voucher' and tableNameStr != 'return_voucher' and tableNameStr != 'recall_voucher'">
+			   c2.name as customer_name,
+			   c2.code AS customer_code,
+		   </if>
+		td.full_name AS td_truck_driver_full_name
+		<if test="tableNameStr == 'sold_voucher' or tableNameStr == 'sold_delivery_voucher' or tableNameStr == 'maintain_voucher'
+		or tableNameStr == 'factory_export_voucher' or tableNameStr == 'factory_import_voucher' or tableNameStr == 'delivery_voucher'">
+			,sm.full_name AS sm_full_name
+		</if>
+		FROM ${tableNameStr}
+		LEFT JOIN company c1 ON ${tableNameStr}.company_id = c1.id
+		<if test="tableNameStr != 'delivery_voucher' and tableNameStr != 'return_voucher' and tableNameStr != 'recall_voucher'">
+			LEFT JOIN customer c2 ON ${tableNameStr}.customer_id = c2.id
+		</if>
+		<if test="tableNameStr == 'sold_voucher' or tableNameStr == 'sold_delivery_voucher' or tableNameStr == 'maintain_voucher'
+		or tableNameStr == 'factory_export_voucher' or tableNameStr == 'factory_import_voucher' or tableNameStr == 'delivery_voucher'">
+			LEFT JOIN salesman sm ON ${tableNameStr}.salesman_id = sm.id
+		</if>
+		LEFT JOIN truck_driver td ON ${tableNameStr}.truck_driver_id = td.id
+		<if test="tableNameStr == 'gas_refueling_voucher'">
+				LEFT JOIN account_voucher_code avc ON ${tableNameStr}.id = avc.voucher_id
+		</if>
+		<if test="tableNameStr != 'gas_refueling_voucher'">
+				JOIN account_voucher_code avc ON ${tableNameStr}.id = avc.voucher_id AND avc.active = 1
+		</if>
+		<if test="tableNameStr == 'payment_voucher'">
+			LEFT JOIN account_voucher_code avc2 ON ${tableNameStr}.delivery_voucher_id = avc2.voucher_id
+			LEFT JOIN account_voucher_code avc3 ON ${tableNameStr}.sold_voucher_no = avc3.voucher_id
+			LEFT JOIN account_voucher_code avc4 ON ${tableNameStr}.sold_delivery_voucher_no = avc4.voucher_id
+		</if>
+		<if test="tableNameStr == 'recall_voucher' or tableNameStr == 'return_voucher' or tableNameStr == 'sold_delivery_voucher'">
+			LEFT JOIN account_voucher_code avc2 ON ${tableNameStr}.delivery_voucher_id = avc2.voucher_id
+		</if>
+		<include refid="joinGoodInOut"></include>
+		<include refid="filter"></include>
+		${pagingStr}
+    </select>
+	<sql id="joinGoodInOut">
+		<if test="where.goods_in_out_type !=null or where.product_id != null">
+			JOIN (select distinct voucher_id from goods_in_out
+			<where>
+				<if test="where.goods_in_out_type != null">
+					AND [type] =#{where.goods_in_out_type}
+				</if>
+				<if test="where.product_id != null">
+					AND product_id =#{where.product_id}
+				</if>
+			</where>
+			)
+			goods_in_out on goods_in_out.voucher_id = ${tableNameStr}.id
+		</if>
+	</sql>
+
+    <resultMap id="result" type="com.ceti.wholesale.dto.VoucherDto">
+        <result property="id" column="id"/>
+        <result property="no" column="no"/>
+        <result property="accNo" column="acc_no"/>
+        <result property="soldVoucherAccNo" column="sold_voucher_acc_no"/>
+        <result property="soldDeliveryVoucherAccNo" column="sold_delivery_acc_voucher_no"/>
+        <result property="deliveryVoucherAccNo" column="delivery_voucher_acc_no"/>        
+        <result property="voucherCode" column="voucher_code"/>
+		<result property="soldVoucherNo" column="sold_voucher_no"/>
+        <result property="voucherAt" column="voucher_at"/>
+        <result property="companyId" column="company_id"/>
+        <result property="customerId" column="customer_id"/>
+        <result property="salesmanId" column="salesman_id"/>
+		<result property="salesmanId2" column="salesman_id_2"/>
+		<result property="truckDriverId" column="truck_driver_id"/>
+        <result property="truckLicensePlateNumber" column="truck_license_plate_number"/>
+        <result property="totalGoods" column="total_goods"/>
+        <result property="totalGas" column="total_gas"/>
+        <result property="note" column="note"/>
+		<result property="payer" column="payer"/>
+		<result property="type" column="type"/>
+		<result property="paymentVoucherId" column="payment_voucherId"/>
+		<result property="totalReceivable" column="total_receivable"/>
+		<result property="totalPaymentReceived" column="total_payment_received"/>
+		<result property="totalGoodsReturn" column="total_goods_return"/>
+	 	<result property="createdByFullName" column="created_by_full_name"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updateByFullName" column="update_by_full_name"/>
+        <result property="updateAt" column="update_at"/>
+        <result property="factoryId" column="factory_id"/>
+		<result property="inFactory" column="in_factory"/>
+		<result property="deliveryVoucherNo" column="delivery_voucher_no"/>
+		<result property="deliveryVoucherId" column="delivery_voucher_id"/>
+        <result property="truckDriverFullName" column="truck_driver_full_name"/>
+        <result property="salesmanFullName" column="salesman_full_name"/>
+		<result property="salesmanFullName2" column="salesman_full_name_2"/>
+		<result property="soldDeliveryVoucherNo" column="sold_delivery_voucher_no"/>
+		<result property="soldVoucherNo" column="sold_voucher_no"/>
+		<result property="paymentVoucherId" column="payment_voucher_id"/>
+		<association property="company" javaType="com.ceti.wholesale.dto.CompanyDto">
+        	<result property="name" column="company_name"/>
+			<result property="id" column="company_id"/>
+        </association>
+        <association property="customer" javaType="com.ceti.wholesale.dto.CustomerDto">
+			<result property="code" column="customer_code"/>
+			<result property="name" column="customer_name"/>
+			<result property="id" column="customer_id"/>
+        </association>
+		 <association property="truckDriver" javaType="com.ceti.wholesale.dto.TruckDriverDto">
+			<result property="fullName" column="td_truck_driver_full_name"/>
+			 <result property="id" column="truck_driver_id"/>
+		</association>
+		 <association property="salesman" javaType="com.ceti.wholesale.dto.SalesmanDto">
+			<result property="fullName" column="sm_full_name"/>
+			 <result property="id" column="salesman_id"/>
+		 </association>
+		<association property="truck" javaType="com.ceti.wholesale.dto.TruckDto">
+			<result property="licensePlateNumber" column="truck_license_plate_number"/>
+		</association>
+    </resultMap>
+
+    <select id="countList" resultType="long">
+		SELECT
+			COUNT(*)
+		FROM ${tableNameStr}
+		<if test="tableNameStr == 'gas_refueling_voucher'">
+			LEFT JOIN account_voucher_code avc ON ${tableNameStr}.id = avc.voucher_id
+		</if>
+		<if test="tableNameStr != 'gas_refueling_voucher'">
+			JOIN account_voucher_code avc ON ${tableNameStr}.id = avc.voucher_id AND avc.active = 1
+		</if>
+		<if test="tableNameStr == 'payment_voucher'">
+			LEFT JOIN account_voucher_code avc2 ON ${tableNameStr}.delivery_voucher_id = avc2.voucher_id
+			LEFT JOIN account_voucher_code avc3 ON ${tableNameStr}.sold_voucher_no = avc3.voucher_id
+			LEFT JOIN account_voucher_code avc4 ON ${tableNameStr}.sold_delivery_voucher_no = avc4.voucher_id
+		</if>
+		<if test="tableNameStr == 'recall_voucher' or tableNameStr == 'return_voucher' or tableNameStr == 'sold_delivery_voucher'">
+			LEFT JOIN account_voucher_code avc2 ON ${tableNameStr}.delivery_voucher_id = avc2.voucher_id
+		</if>
+		<include refid="joinGoodInOut"></include>
+		<include refid="filter"></include>
+    </select>
+</mapper>

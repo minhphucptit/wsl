@@ -1,0 +1,64 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.GoodsInventoryMapper">
+	<sql id="filter">
+		<where>
+			<if test="voucherId != null">
+				AND a.voucher_id = #{voucherId}
+			</if>
+			<if test="productType != null">
+				AND a.product_type = #{productType}
+			</if>
+		</where>
+	</sql>
+
+    <select id="getList" resultMap="result" parameterType="map">
+	    SELECT
+			a.*,
+			b.id as product_status_id
+			,b.name as product_status_name
+			,b.code as product_status_code
+			
+		FROM 
+			goods_inventory a
+		LEFT JOIN
+			product_status b ON a.product_status_id = b.id
+		<include refid="filter"></include>
+		order by stt ASC
+    </select>
+    
+    <resultMap id="result" type="com.ceti.wholesale.dto.GoodsInventoryDto">
+        <result property="voucherId" column="voucher_id"/>
+        <result property="voucherNo" column="voucher_no"/>
+        <result property="productId" column="product_id"/>
+        <result property="productName" column="product_name"/>
+        <result property="voucherCode" column="voucher_code"/>
+        <result property="unit" column="unit"/>
+        <result property="productType" column="product_type"/>
+        <result property="weight" column="weight"/>
+        <result property="factoryId" column="factory_id"/>
+        <result property="companyId" column="company_id"/>
+        <result property="inventory" column="inventory"/>
+        <result property="stt" column="stt"/>
+        <association property="productStatus" javaType="com.ceti.wholesale.dto.ProductStatusDto">
+        	<result property="id" column="product_status_id"/>
+        	<result property="name" column="product_status_name"/>
+        	<result property="code" column="product_status_code"/>
+        </association>
+    </resultMap>
+    
+    
+    
+    <select id="countList" resultType="long">
+		SELECT
+			COUNT(a.id)
+		FROM 
+			goods_inventory a
+		LEFT JOIN
+			product_status b ON a.product_status_id = b.id
+		<include refid="filter"></include>
+		 
+    </select>
+
+</mapper>

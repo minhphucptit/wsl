@@ -1,0 +1,302 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.RevenueAndCycleStatisticMapper">
+
+	<select id="getList" resultMap="result_1,test2" parameterType="map">
+		
+		--Bảng đầu kỳ
+		DECLARE @begin TABLE(
+			customer_id varchar(32),
+			beginning_debt_6 decimal(19,2),
+			beginning_debt_12 decimal(19,2),
+			beginning_debt_45 decimal(19,2)
+		)
+		
+		-- Bảng phát sinh
+		DECLARE @interm TABLE(
+			customer_id varchar(32),
+			interm_debt_6 decimal(19,2),
+			interm_debt_12 decimal(19,2),
+			interm_debt_45 decimal(19,2)
+		)
+		
+		-- Bảng sản lượng báo cáo
+		DECLARE @revenue TABLE(
+			customer_id varchar(32),
+			revenue_debt_6 decimal(19,2),
+			revenue_debt_12 decimal(19,2),
+			revenue_debt_45 decimal(19,2)
+		)
+		
+		-- Bảng gộp đầu kỳ, phát sinh, sản lượng báo cáo
+		DECLARE @revenueAndCycle TABLE(
+			customer_id varchar(32),
+			beginning_debt_6 decimal(19,2),
+			beginning_debt_12 decimal(19,2),
+			beginning_debt_45 decimal(19,2),
+			interm_debt_6 decimal(19,2),
+			interm_debt_12 decimal(19,2),
+			interm_debt_45 decimal(19,2),
+			revenue_debt_6 decimal(19,2),
+			revenue_debt_12 decimal(19,2),
+			revenue_debt_45 decimal(19,2)
+		)
+		
+		-- Bảng gộp đầu kỳ, phát sinh, cuối kỳ, sản lượng báo cáo, vòng quay 
+		DECLARE @revenueAndCycle2 TABLE(
+			customer_code nvarchar(64),
+			customer_name nvarchar(255),
+			customer_id varchar(32),
+			beginning_debt_6 decimal(19,2),
+			beginning_debt_12 decimal(19,2),
+			beginning_debt_45 decimal(19,2),
+			interm_debt_6 decimal(19,2),
+			interm_debt_12 decimal(19,2),
+			interm_debt_45 decimal(19,2),
+			revenue_debt_6 decimal(19,2),
+			revenue_debt_12 decimal(19,2),
+			revenue_debt_45 decimal(19,2),
+			ending_debt_6 decimal(19,2),
+			ending_debt_12 decimal(19,2),
+			ending_debt_45 decimal(19,2),
+			cycle_6 decimal(20,4),
+			cycle_12 decimal(20,4),
+			cycle_45 decimal(20,4)
+		)
+		
+		-- Lấy số lượng vỏ khách hàng mượn đầu năm và từ đầu năm đến date_from
+		INSERT INTO @begin
+		SELECT
+			customer_id, SUM(beginning_debt_6) AS beginning_debt_6, SUM(beginning_debt_12) AS beginning_debt_12, 
+			SUM(beginning_debt_45) AS beginning_debt_45
+		FROM (
+				-- Lấy số lượng vỏ khách hàng mượn đầu năm bình 6
+				SELECT b.customer_id, ISNULL(b.inventory,0) AS beginning_debt_6 , 0 AS beginning_debt_12, 0 AS beginning_debt_45
+				FROM beginning_cylinder_debt b
+				LEFT JOIN product p ON b.product_id = p.id AND b.factory_id = p.factory_id
+				WHERE b.[year] = YEAR(#{date_from} AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time') AND p.cylinder_category = 6
+				
+				UNION ALL
+				
+				-- Lấy số lượng vỏ khách hàng mượn đầu năm bình 12
+				SELECT b.customer_id, 0 AS beginning_debt_6 , ISNULL(b.inventory,0) AS beginning_debt_12, 0 AS beginning_debt_45
+				FROM beginning_cylinder_debt b
+				LEFT JOIN product p ON b.product_id = p.id AND b.factory_id = p.factory_id
+				WHERE b.[year] = YEAR(#{date_from} AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time') AND p.cylinder_category = 12
+				
+				UNION ALL
+				-- Lấy số lượng vỏ khách hàng mượn đầu năm bình 45
+				SELECT b.customer_id, 0 AS beginning_debt_6 , 0 AS beginning_debt_12, ISNULL(b.inventory,0) AS beginning_debt_45
+				FROM beginning_cylinder_debt b
+				LEFT JOIN product p ON b.product_id = p.id AND b.factory_id = p.factory_id
+				WHERE b.[year] = YEAR(#{date_from} AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time') AND p.cylinder_category = 45
+	
+				UNION ALL
+		
+				-- Lấy số lượng vỏ khách mượn từ đầu năm đến date_from bình 6
+				SELECT c.customer_id , (ISNULL(out_quantity,0) - ISNULL(in_quantity,0)) AS beginning_debt_6, 0 AS beginning_debt_12, 0 beginning_debt_45
+				FROM cylinder_debt c
+				LEFT JOIN product p ON c.product_id = p.id AND c.factory_id = p.factory_id
+				WHERE c.voucher_at BETWEEN dbo.get_first_day_of_year(#{date_from}) AND DATEADD(DAY, -1, #{date_from}) AND p.cylinder_category = 6
+				
+				UNION ALL
+				
+				-- Lấy số lượng vỏ khách mượn từ đầu năm đến date_from bình 12
+				SELECT c.customer_id , 0 AS beginning_debt_6, (ISNULL(out_quantity,0) - ISNULL(in_quantity,0)) AS beginning_debt_12, 0 beginning_debt_45
+				FROM cylinder_debt c
+				LEFT JOIN product p ON c.product_id = p.id AND c.factory_id = p.factory_id
+				WHERE c.voucher_at BETWEEN dbo.get_first_day_of_year(#{date_from}) AND DATEADD(DAY, -1, #{date_from}) AND p.cylinder_category = 12
+			
+				UNION ALL
+				
+				-- Lấy số lượng vỏ khách mượn từ đầu năm đến date_from bình 45
+				SELECT c.customer_id , 0 AS beginning_debt_6, 0 AS beginning_debt_12, (ISNULL(out_quantity,0) - ISNULL(in_quantity,0)) beginning_debt_45
+				FROM cylinder_debt c
+				LEFT JOIN product p ON c.product_id = p.id AND c.factory_id = p.factory_id
+				WHERE c.voucher_at BETWEEN dbo.get_first_day_of_year(#{date_from}) AND DATEADD(DAY, -1, #{date_from}) AND p.cylinder_category = 45
+		)	AS a
+		GROUP BY customer_id
+		
+		
+		-- Lấy số lượng vỏ khách mượn từ date_from đến date_to
+		INSERT INTO @interm
+		SELECT
+			customer_id, SUM(interm_debt_6) interm_debt_6, SUM(interm_debt_12) interm_debt_12, SUM(interm_debt_45) interm_debt_45
+		FROM (
+				-- Bình 6
+				SELECT c.customer_id,(ISNULL(out_quantity,0) - ISNULL(in_quantity,0) ) AS interm_debt_6, 0 AS interm_debt_12, 0 AS interm_debt_45
+				FROM cylinder_debt c
+				LEFT JOIN product p ON c.product_id = p.id AND c.factory_id = p.factory_id
+				WHERE c.voucher_at BETWEEN #{date_from} AND #{date_to} AND p.cylinder_category = 6
+				
+				UNION ALL 
+				
+				-- Bình 12
+				SELECT c.customer_id,0 AS interm_debt_6, (ISNULL(out_quantity,0) - ISNULL(in_quantity,0)) AS interm_debt_12, 0 AS interm_debt_45
+				FROM cylinder_debt c
+				LEFT JOIN product p ON c.product_id = p.id AND c.factory_id = p.factory_id
+				WHERE c.voucher_at BETWEEN #{date_from} AND #{date_to} AND p.cylinder_category = 12
+				
+				UNION ALL 
+				
+				-- Bình 45
+				SELECT c.customer_id,0 AS interm_debt_6, 0 AS interm_debt_12, (ISNULL(out_quantity,0) - ISNULL(in_quantity,0)) AS interm_debt_45
+				FROM cylinder_debt c
+				LEFT JOIN product p ON c.product_id = p.id AND c.factory_id = p.factory_id
+				WHERE c.voucher_at BETWEEN #{date_from} AND #{date_to} AND p.cylinder_category = 45
+			
+		)	AS a
+		GROUP BY customer_id
+		HAVING SUM(interm_debt_6) + SUM(interm_debt_12) + SUM(interm_debt_45) > 0
+		
+		-- Lấy sản lượng báo cáo kg theo gas
+		INSERT INTO @revenue
+		SELECT
+			customer_id, SUM(revenue_debt_6) , SUM(revenue_debt_12), SUM(revenue_debt_45)
+		FROM (
+				-- Bình 6 của gas
+				SELECT c.customer_id,ISNULL(out_quantity,0) * c.weight AS revenue_debt_6, 0 AS revenue_debt_12, 0 AS revenue_debt_45
+				FROM goods_in_out c
+				WHERE c.voucher_at BETWEEN #{date_from} AND #{date_to} AND c.product_type='GAS'
+				AND out_quantity > 0 AND [weight] = 6
+				
+				UNION ALL 
+				
+				-- Bình 12 của gas
+				SELECT c.customer_id, 0 AS revenue_debt_6, ISNULL(out_quantity,0) * c.weight AS revenue_debt_12, 0 AS revenue_debt_45
+				FROM goods_in_out c
+				WHERE c.voucher_at BETWEEN #{date_from} AND #{date_to} AND c.product_type='GAS'
+				AND out_quantity > 0 AND [weight] = 12
+				
+				UNION ALL 
+				
+				-- Bình 45 của gas
+				SELECT c.customer_id, 0 AS revenue_debt_6, 0 AS revenue_debt_12, ISNULL(out_quantity,0) * c.weight AS revenue_debt_45
+				FROM goods_in_out c
+				WHERE c.voucher_at BETWEEN #{date_from} AND #{date_to} AND c.product_type='GAS'
+				AND out_quantity > 0 AND [weight] = 45
+				
+				UNION ALL
+				
+				-- Bình 6 của gasbon
+				SELECT c.customer_id, 
+				(CASE WHEN i.customer_id is null THEN  0
+					ELSE (ISNULL(c.out_quantity,0)* i.interm_debt_6)/(i.interm_debt_6 + i.interm_debt_12 + i.interm_debt_45) END) AS revenue_debt_6,
+					0 AS revenue_debt_12, 0 AS revenue_debt_45
+				FROM goods_in_out c
+				LEFT JOIN @interm i ON c.customer_id = i.customer_id
+				WHERE c.voucher_at BETWEEN #{date_from} AND #{date_to} AND c.product_type='GASBON' AND c.is_main_product = 1 AND c.out_quantity > 0
+				
+				UNION ALL
+				
+				-- Bình 12 của gasbon
+				SELECT c.customer_id, 0 AS revenue_debt_6,
+				(CASE WHEN i.customer_id is null THEN  0 
+					ELSE (ISNULL(c.out_quantity,0)* i.interm_debt_12)/(i.interm_debt_6 + i.interm_debt_12 + i.interm_debt_45) END) AS revenue_debt_12, 0 AS revenue_debt_45
+				FROM goods_in_out c
+				LEFT JOIN @interm i ON c.customer_id = i.customer_id
+				WHERE c.voucher_at BETWEEN #{date_from} AND #{date_to} AND c.product_type='GASBON' AND c.is_main_product = 1 AND c.out_quantity > 0
+				
+				UNION ALL
+				
+				-- Bình 45 của gasbon
+				SELECT c.customer_id, 0 AS revenue_debt_6, 0 AS revenue_debt_12, 
+				(CASE WHEN i.customer_id is null THEN  0 
+					ELSE (ISNULL(c.out_quantity,0)* i.interm_debt_45)/(i.interm_debt_6 + i.interm_debt_12 + i.interm_debt_45) END) AS revenue_debt_45
+				FROM goods_in_out c
+				LEFT JOIN @interm i ON c.customer_id = i.customer_id
+				WHERE c.voucher_at BETWEEN #{date_from} AND #{date_to} AND c.product_type='GASBON' AND c.is_main_product = 1 AND c.out_quantity > 0
+			
+		)	AS a
+		GROUP BY customer_id
+
+
+		INSERT INTO @revenueAndCycle
+		SELECT 
+        (CASE
+            WHEN b.customer_id is not null THEN b.customer_id 
+            WHEN i.customer_id is not null THEN i.customer_id
+            WHEN r.customer_id is not null THEN r.customer_id
+            ELSE null
+        END ) AS customer_id,
+			b.beginning_debt_6,
+			b.beginning_debt_12,
+			b.beginning_debt_45,
+			i.interm_debt_6,
+			i.interm_debt_12,
+			i.interm_debt_45,
+			r.revenue_debt_6,
+			r.revenue_debt_12,
+			r. revenue_debt_45
+		FROM @begin b
+		LEFT JOIN @interm i ON b.customer_id = i.customer_id
+		LEFT JOIN @revenue r ON b.customer_id = r.customer_id
+		
+		INSERT INTO @revenueAndCycle2
+		SELECT c.code AS code, c.name AS name ,r.*,
+		( ISNULL(beginning_debt_6,0) + ISNULL(interm_debt_6,0)) AS ending_debt_6, (ISNULL(beginning_debt_12,0) + ISNULL(interm_debt_12,0)) AS ending_debt_12, 
+		( ISNULL(beginning_debt_45,0) + ISNULL(interm_debt_45,0)) AS ending_debt_45,
+			CASE WHEN ( ISNULL(beginning_debt_6,0) + ISNULL(interm_debt_6,0)) = 0 then 0 else CONVERT(decimal(20,4), (ISNULL(revenue_debt_6,0)/6)/ ( ISNULL(beginning_debt_6,0) + ISNULL(interm_debt_6,0))) END AS cycle_6,
+			CASE WHEN ( ISNULL(beginning_debt_12,0) + ISNULL(interm_debt_12,0)) = 0 then 0 else CONVERT(decimal(20,4),(ISNULL(revenue_debt_12,0)/12)/ ( ISNULL(beginning_debt_12,0) + ISNULL(interm_debt_12,0))) END AS cycle_12,
+			CASE WHEN ( ISNULL(beginning_debt_45,0) + ISNULL(interm_debt_45,0)) = 0 then 0 else CONVERT(decimal(20,4),(ISNULL(revenue_debt_45,0)/45)/ ( ISNULL(beginning_debt_45,0) + ISNULL(interm_debt_45,0))) END AS cycle_45
+		FROM @revenueAndCycle r
+		LEFT JOIN customer c ON r.customer_id = c.id
+		<if test="customer_code != null">
+				WHERE c.code = #{customer_code}
+		</if>
+		order by c.code
+		
+		SELECT * FROM @revenueAndCycle2
+		
+		SELECT SUM(ISNULL(total.beginning_debt_6,0)) AS total_beginning_debt_6, SUM(ISNULL(total.beginning_debt_12,0)) AS total_beginning_debt_12, SUM(ISNULL(total.beginning_debt_45,0)) AS total_beginning_debt_45,
+		SUM(ISNULL(total.interm_debt_6,0)) AS total_interm_debt_6, SUM(ISNULL(total.interm_debt_12,0)) AS total_interm_debt_12, SUM(ISNULL(total.interm_debt_45,0)) AS total_interm_debt_45,
+		SUM(ISNULL(total.ending_debt_6,0)) AS total_ending_debt_6, SUM(ISNULL(total.ending_debt_12,0)) AS total_ending_debt_12, SUM(ISNULL(total.ending_debt_45,0)) AS total_ending_debt_45,
+		SUM(ISNULL(total.revenue_debt_6,0)) AS total_revenue_debt_6, SUM(ISNULL(total.revenue_debt_12,0)) AS total_revenue_debt_12, SUM(ISNULL(total.revenue_debt_45,0)) AS total_revenue_debt_45,
+		CONVERT(decimal(20,4),AVG(ISNULL(total.cycle_6,0))) AS total_cycle_6, CONVERT(decimal(20,4),AVG(ISNULL(total.cycle_12,0))) AS total_cycle_12, CONVERT(decimal(20,4),AVG(ISNULL(total.cycle_45,0))) AS total_cycle_45
+		FROM @revenueAndCycle2 AS total
+		
+
+	</select>
+	
+	<resultMap id="result_1" type="com.ceti.wholesale.dto.RevenueAndCycleStatisticDto">
+		<result property="beginningDebt6" column="beginning_debt_6" />
+		<result property="beginningDebt12" column="beginning_debt_12" />
+		<result property="beginningDebt45" column="beginning_debt_45" />
+		<result property="intermDebt6" column="interm_debt_6" />
+		<result property="intermDebt12" column="interm_debt_12" />
+		<result property="intermDebt45" column="interm_debt_45" />
+		<result property="endingDebt6" column="ending_debt_6" />
+		<result property="endingDebt12" column="ending_debt_12" />
+		<result property="endingDebt45" column="ending_debt_45" />
+		<result property="revenueDebt6" column="revenue_debt_6" />
+		<result property="revenueDebt12" column="revenue_debt_12" />
+		<result property="revenueDebt45" column="revenue_debt_45" />
+		<result property="cycle6" column="cycle_6" />
+		<result property="cycle12" column="cycle_12" />
+		<result property="cycle45" column="cycle_45" />
+		<association property="customer" javaType="com.ceti.wholesale.dto.CustomerDto">
+			<result property="code" column="customer_code"/>
+			<result property="name" column="customer_name"/>
+			<result property="id" column="customer_id"/>
+        </association>
+	</resultMap>
+	
+	<resultMap id="test2" type="com.ceti.wholesale.dto.RevenueAndCycleStatisticCustomerDto">
+		<result property="totalBeginningDebt6" column="total_beginning_debt_6" />
+		<result property="totalBeginningDebt12" column="total_beginning_debt_12" />
+		<result property="totalBeginningDebt45" column="total_beginning_debt_45" />
+		<result property="totalIntermDebt6" column="total_interm_debt_6" />
+		<result property="totalIntermDebt12" column="total_interm_debt_12" />
+		<result property="totalIntermDebt45" column="total_interm_debt_45" />
+		<result property="totalEndingDebt6" column="total_ending_debt_6" />
+		<result property="totalEndingDebt12" column="total_ending_debt_12" />
+		<result property="totalEndingDebt45" column="total_ending_debt_45" />
+		<result property="totalRevenueDebt6" column="total_revenue_debt_6" />
+		<result property="totalRevenueDebt12" column="total_revenue_debt_12" />
+		<result property="totalRevenueDebt45" column="total_revenue_debt_45" />
+		<result property="totalCycle6" column="total_cycle_6" />
+		<result property="totalCycle12" column="total_cycle_12" />
+		<result property="totalCycle45" column="total_cycle_45" />
+	</resultMap>
+</mapper>

@@ -1,0 +1,75 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.DeliveryVoucherMapper">
+    <sql id="filter">
+		<where>
+			<if test="voucher_at_from != null">
+				AND dv.voucher_at <![CDATA[>=]]> #{voucher_at_from}
+			</if>
+			<if test="voucher_at_to != null">
+				AND dv.voucher_at <![CDATA[<=]]>  #{voucher_at_to}
+			</if>
+			<if test="truck_license_plate_number != null">
+				AND dv.truck_license_plate_number = #{truck_license_plate_number}
+			</if>
+			<if test="factory_id != null">
+				AND dv.factory_id = #{factory_id}
+			</if>
+			<if test="no != null">
+				AND dv.no LIKE CONCAT('%', #{no}, '%')
+			</if>
+		</where>
+	</sql>
+
+    <select id="getList" resultMap="result" parameterType="map">
+	    SELECT
+			dv.*,
+			c.name as company_name,
+			td.full_name AS truck_driver_full_name
+		FROM delivery_voucher dv
+		LEFT JOIN company c ON dv.company_id = c.id
+		LEFT JOIN truck_driver td ON dv.truck_driver_id = td.id
+		<if test="product_id != null">
+			JOIN (select distinct voucher_id from goods_in_out where product_id =#{product_id}) goods_in_out on goods_in_out.voucher_id = dv.id
+		</if>
+		<include refid="filter"></include>
+		${pagingStr}
+    </select>
+
+    <resultMap id="result" type="com.ceti.wholesale.dto.DeliveryVoucherDto">
+        <result property="id" column="id"/>
+        <result property="no" column="no"/>
+        <result property="voucherCode" column="voucher_code"/>
+        <result property="voucherAt" column="voucher_at"/>
+        <result property="truckDriverId" column="truck_driver_id"/>
+        <result property="truckLicensePlateNumber" column="truck_license_plate_number"/>
+        <result property="totalGoods" column="total_goods"/>
+        <result property="note" column="note"/>
+	 	<result property="createdByFullName" column="created_by_full_name"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updateByFullName" column="update_by_full_name"/>
+        <result property="updateAt" column="update_at"/>
+		<result property="companyId" column="company_id"/>
+        <result property="factoryId" column="factory_id"/>
+        <result property="truckDriverFullName" column="truck_driver_full_name"/>
+        <association property="company" javaType="com.ceti.wholesale.dto.CompanyDto">
+        	<result property="name" column="company_name"/>
+			<result property="id" column="company_id"/>
+        </association>
+		 <association property="truckDriver" javaType="com.ceti.wholesale.dto.TruckDriverDto">
+			 <result property="fullName" column="truck_driver_full_name"/>
+			 <result property="id" column="truck_driver_id"/>
+		</association>
+    </resultMap>
+
+    <select id="countList" resultType="long">
+		SELECT
+			COUNT(*)
+		FROM delivery_voucher dv
+		<if test="product_id != null">
+			JOIN (select distinct voucher_id from goods_in_out where product_id =#{product_id}) goods_in_out on goods_in_out.voucher_id = dv.id
+		</if>
+		<include refid="filter"></include>
+    </select>
+</mapper>

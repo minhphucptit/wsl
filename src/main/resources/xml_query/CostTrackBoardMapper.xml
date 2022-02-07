@@ -1,0 +1,114 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.CostTrackBoardMapper">
+	<sql id="filter">
+		<where>
+			<if test="action_date_from != null">
+				AND tctb.action_date <![CDATA[>=]]> #{action_date_from}
+			</if>
+			<if test="action_date_to != null">
+				AND tctb.action_date <![CDATA[<=]]> #{action_date_to}
+			</if>
+			<if test="truck_cost_type_id != null">
+				AND tctb.truck_cost_type_id = #{truck_cost_type_id}
+			</if>
+			<if test="factory_id != null">
+				AND tctb.factory_id = #{factory_id}
+			</if>
+			<if test="truck_license_plate_number != null">
+				AND tctb.truck_license_plate_number LIKE CONCAT('%', #{truck_license_plate_number}, '%')
+			</if>
+			<if test="type != null">
+				AND tctb.type = #{type}
+			</if>
+			<if test="equipment_id != null">
+				AND tctb.equipment_id = #{equipment_id}
+			</if>
+			<if test="cost_track_board_type != null">
+				AND tctb.cost_track_board_type = #{cost_track_board_type}
+			</if>
+			<if test="equipment_cost_type_name != null">
+				AND tctb.equipment_cost_type_name LIKE CONCAT('%', #{equipment_cost_type_name}, '%')
+			</if>
+		</where>
+	</sql>
+
+	<select id="getList" resultMap="result" parameterType="map">
+		SELECT
+        tctb.*,
+		f.name AS factory_name,
+		tct.name AS truck_cost_type_name,
+		td.full_name AS truck_driver_full_name,
+		e.name AS equipment_name
+
+		FROM cost_track_board tctb
+		LEFT JOIN factory f ON tctb.factory_id = f.id
+		LEFT JOIN truck_cost_type tct ON tctb.truck_cost_type_id = tct.id
+		LEFT JOIN truck_driver td ON tctb.truck_driver_id = td.id
+		LEFT JOIN equipment e ON e.id = tctb.equipment_id AND e.factory_id = tctb.factory_id
+		<include refid="filter"></include>
+		ORDER BY tctb.action_date DESC
+		OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
+	</select>
+
+	<resultMap id="result" type="com.ceti.wholesale.dto.CostTrackBoardDto">
+		<result property="id" column="id"/>
+		<result property="truckLicensePlateNumber" column="truck_license_plate_number"/>
+		<result property="km" column="km"/>
+		<result property="truckCostTypeId" column="truck_cost_type_id"/>
+		<result property="brand" column="brand"/>
+		<result property="madeIn" column="made_in"/>
+		<result property="specifications" column="specifications"/>
+		<result property="actionDate" column="action_date"/>
+		<result property="warrantyDateTo" column="warranty_date_to"/>
+		<result property="type" column="type"/>
+		<result property="unit" column="unit"/>
+		<result property="unitPrice" column="unit_price"/>
+		<result property="quantity" column="quantity"/>
+
+		<result property="total" column="total"/>
+		<result property="truckDriverId" column="truck_driver_id"/>
+		<result property="gara" column="gara"/>
+		<result property="note" column="note"/>
+		<result property="factoryId" column="factory_id"/>
+		<result property="factoryName" column="factory_name"/>
+		<result property="truckCostTypeName" column="truck_cost_type_name"/>
+		<result property="truckDriverFullName" column="truck_driver_full_name"/>
+		<result property="equipmentId" column="equipment_id"/>
+		<result property="costTrackBoardType" column="cost_track_board_type"/>
+		<result property="equipmentCostTypeName" column="equipment_cost_type_name"/>
+		<result property="equipmentSupervisor" column="equipment_supervisor"/>
+		<association property="truckCostType" javaType="com.ceti.wholesale.dto.TruckCostTypeDto">
+			<result property="name" column="truck_cost_type_name"/>
+			<result property="id" column="truck_cost_type_id"/>
+		</association>
+		<association property="equipment" javaType="com.ceti.wholesale.dto.EquipmentDto">
+			<result property="name" column="equipment_name"/>
+			<result property="id" column="equipment_id"/>
+		</association>
+	</resultMap>
+
+	<resultMap id="total" type="com.ceti.wholesale.dto.CostTrackBoardTotalQuantityAndTotalItemsDto">
+		<result property="totalItems" column="total_items"/>
+		<result property="totalQuantity" column="total_quantity"/>
+	</resultMap>
+
+	<select id="getTotal" resultMap="total" parameterType="map">
+		SELECT
+		COUNT(id) AS total_items,
+		SUM(total) AS total_quantity
+		FROM cost_track_board tctb
+		<include refid="filter"></include>
+
+	</select>
+
+	<select id="countList" resultType="long">
+		SELECT COUNT(id)
+		FROM
+		cost_track_board tctb
+		<include refid="filter"></include>
+
+	</select>
+
+</mapper>

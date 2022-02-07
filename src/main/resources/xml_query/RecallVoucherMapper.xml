@@ -1,0 +1,89 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.RecallVoucherMapper">
+    <sql id="filter">
+		<where>
+			<if test="voucher_at_from != null">
+				AND rv.voucher_at <![CDATA[>=]]> #{voucher_at_from}
+			</if>
+			<if test="voucher_at_to != null">
+				AND rv.voucher_at <![CDATA[<=]]>  #{voucher_at_to}
+			</if>
+			<if test="company_id != null">
+				AND rv.company_id = #{company_id}
+			</if>
+			<if test="truck_license_plate_number != null">
+				AND rv.truck_license_plate_number = #{truck_license_plate_number}
+			</if>
+			<if test="factory_id != null">
+				AND rv.factory_id = #{factory_id}
+			</if>
+		</where>
+	</sql>
+
+    <select id="getList" resultMap="result" parameterType="map">
+	    SELECT
+			rv.*,
+			c.name as company_name,
+			td.full_name AS truck_driver_full_name
+		FROM recall_voucher rv
+		LEFT JOIN company c ON rv.company_id = c.id
+		LEFT JOIN truck_driver td ON rv.truck_driver_id = td.id
+		<include refid="joinGoodInOut"></include>
+		<include refid="filter"></include>
+		${pagingStr}
+    </select>
+
+    <resultMap id="result" type="com.ceti.wholesale.dto.RecallVoucherDto">
+        <result property="id" column="id"/>
+        <result property="no" column="no"/>
+        <result property="voucherCode" column="voucher_code"/>
+        <result property="voucherAt" column="voucher_at"/>
+        <result property="companyId" column="company_id"/>
+        <result property="truckDriverId" column="truck_driver_id"/>
+        <result property="truckLicensePlateNumber" column="truck_license_plate_number"/>
+		<result property="totalGoodsReturn" column="total_goods_return"/>
+        <result property="note" column="note"/>
+	 	<result property="createdByFullName" column="created_by_full_name"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updateByFullName" column="update_by_full_name"/>
+        <result property="updateAt" column="update_at"/>
+        <result property="factoryId" column="factory_id"/>
+        <result property="truckDriverFullName" column="truck_driver_full_name"/>
+		<result property="deliveryVoucherNo" column="delivery_voucher_no"/>
+		<result property="deliveryVoucherId" column="delivery_voucher_id"/>
+        <association property="company" javaType="com.ceti.wholesale.dto.CompanyDto">
+        	<result property="name" column="company_name"/>
+			<result property="id" column="company_id"/>
+        </association>
+		 <association property="truckDriver" javaType="com.ceti.wholesale.dto.TruckDriverDto">
+			<result property="fullName" column="truck_driver_full_name"/>
+			 <result property="id" column="truck_driver_id"/>
+		</association>
+    </resultMap>
+
+	<sql id="joinGoodInOut">
+		<if test="goods_in_out_type !=null or product_id != null">
+			JOIN (select distinct voucher_id from goods_in_out
+			<where>
+				<if test="goods_in_out_type != null">
+					AND [type] =#{goods_in_out_type}
+				</if>
+				<if test="product_id != null">
+					AND product_id =#{product_id}
+				</if>
+			</where>
+			)
+			goods_in_out on goods_in_out.voucher_id = rv.id
+		</if>
+	</sql>
+
+    <select id="countList" resultType="long">
+		SELECT
+			COUNT(*)
+		FROM recall_voucher rv
+		<include refid="joinGoodInOut"></include>
+		<include refid="filter"></include>
+    </select>
+</mapper>

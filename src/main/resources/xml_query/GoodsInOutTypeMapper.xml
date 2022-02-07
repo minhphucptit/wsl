@@ -1,0 +1,42 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.GoodsInOutTypeMapper">
+    <sql id="filter">
+        <where>
+                giotbv.voucher_code = #{voucher_code}
+            <if test="code_not_equal != null">
+                AND giot.code <![CDATA[<>]]> #{code_not_equal}
+            </if>
+        </where>
+    </sql>
+
+    <select id="getList" resultMap="result" parameterType="map">
+        SELECT
+            giot.id,
+            giot.name,
+            giot.code,
+            giot.product_type
+        FROM goods_in_out_type_by_voucher_code giotbv
+        LEFT JOIN goods_in_out_type giot ON giotbv.goods_in_out_type_id = giot.id
+        <include refid="filter"></include>
+        ORDER BY giotbv.sort
+        OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
+    </select>
+
+    <resultMap id="result" type="com.ceti.wholesale.dto.GoodsInOutTypeDto">
+        <result property="id" column="id"/>
+        <result property="code" column="code"/>
+        <result property="name" column="name"/>
+         <result property="productType" column="product_type"/>
+    </resultMap>
+
+    <select id="countList" resultType="long">
+        SELECT
+            COUNT(giot.id)
+        FROM goods_in_out_type_by_voucher_code giotbv
+        LEFT JOIN goods_in_out_type giot ON giotbv.goods_in_out_type_id = giot.id
+        <include refid="filter"></include>
+    </select>
+
+</mapper>

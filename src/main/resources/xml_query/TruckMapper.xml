@@ -1,0 +1,77 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.TruckMapper">
+    <sql id="filter">
+		<where>
+			<if test="where.is_warning_expire == 'true'">
+				(DATEADD(month,-1,explosives_transport_paper_next at time zone 'utc' at time zone 'SE Asia Standard Time')<![CDATA[<]]> explosives_transport_paper_present at time zone 'utc' at time zone 'SE Asia Standard Time'
+				OR DATEADD(month,-1,car_inspection_time_next at time zone 'utc' at time zone 'SE Asia Standard Time')<![CDATA[<]]> car_inspection_time_present at time zone 'utc' at time zone 'SE Asia Standard Time'
+				OR DATEADD(month,-1,car_insurance_next at time zone 'utc' at time zone 'SE Asia Standard Time')<![CDATA[<]]> car_insurance_present at time zone 'utc' at time zone 'SE Asia Standard Time')
+			</if>
+			<if test="where.license_plate_number != null">
+				AND truck.license_plate_number LIKE CONCAT('%', #{where.license_plate_number}, '%')
+			</if>
+			<if test="where.is_active != null">
+				AND truck.is_active = #{where.is_active}
+			</if>
+			<if test="where.factory_id != null">
+				AND truck.factory_id = #{where.factory_id}
+			</if>
+		</where>
+	</sql>
+
+    <select id="getList" resultMap="result" parameterType="map">
+	    SELECT 
+			truck.*
+		<if test="where.embed == 'factory'">
+			,factory.id AS factory_id,
+			factory.name AS factory_name,
+			factory.address_on_voucher AS factory_address_on_voucher,
+			factory.name_on_voucher AS factory_name_on_voucher,
+			factory.director_full_name AS factory_director_full_name
+		</if>
+		FROM truck truck
+		<if test="where.embed == 'factory'">
+			LEFT JOIN factory ON truck.factory_id = factory.id
+		</if>
+		<include refid="filter"></include>
+		${pagingStr}
+    </select>
+    
+    <resultMap id="result" type="com.ceti.wholesale.dto.TruckDto">
+        <result property="licensePlateNumber" column="license_plate_number"/>
+        <result property="factoryId" column="factory_id"/>
+        <result property="madeIn" column="made_in"/>
+        <result property="truckVersion" column="truck_version"/>
+        <result property="manufacturers" column="manufacturers"/>
+        <result property="trunkSize" column="trunk_size"/>
+        <result property="trunkType" column="trunk_type"/>
+        <result property="numberKM" column="number_kM"/>
+        <result property="explosivesTransportPaperPresent" column="explosives_transport_paper_present"/>
+        <result property="explosivesTransportPaperNext" column="explosives_transport_paper_next"/>
+        <result property="carInspectionTimePresent" column="car_inspection_time_present"/>
+        <result property="carInspectionTimeNext" column="car_inspection_time_next"/>
+		<result property="carInsurancePresent" column="car_insurance_present"/>
+		<result property="carInsuranceNext" column="car_insurance_next"/>
+		<result property="truckWeight" column="truck_weight"/>
+		<result property="quota" column="quota"/>
+		<result property="DORatio" column="do_ratio"/>
+		<result property="isActive" column="is_active"/>
+        <association property="factory" javaType="com.ceti.wholesale.dto.FactoryDto">
+        	<result property="id" column="factory_id"/>
+        	<result property="nameOnVoucher" column="factory_code"/>
+        	<result property="name" column="factory_name"/>
+        	<result property="addressOnVoucher" column="factory_address_on_voucher"/>
+        	<result property="directorFullName" column="factory_director_full_name"/>
+        </association>
+    </resultMap>
+
+    <select id="countList" resultType="long">
+		SELECT
+			COUNT(*)
+		FROM truck
+		<include refid="filter"></include>
+    </select>
+
+</mapper>

@@ -1,0 +1,85 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.TruckDistanceMapper">
+    
+   <select id="getList" resultMap="result_1, result_2" parameterType="map">
+		-- Lấy danh sách
+		DECLARE @time TABLE(
+			day datetime,
+			quantity decimal(19,2),
+			distance decimal(19,2),
+			truck_license_plate_number varchar(32)
+		)
+		
+		DECLARE @date DATE = datefromparts(#{year}, #{month}, 1)
+		
+		INSERT INTO @time
+		SELECT day, SUM(quantity), SUM(distance), MAX(truck_license_plate_number)
+		FROM (
+			SELECT day, 0 quantity, isnull(distance,0) distance, truck_license_plate_number
+			FROM truck_distance
+			WHERE truck_license_plate_number =#{truck_license_plate_number}
+			AND month(day AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time')= MONTH(@date)
+			AND year(day AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time')= YEAR(@date)
+			
+			UNION ALL
+			
+			SELECT action_date AS day, isnull(quantity,0), 0 distance, null
+			FROM cost_track_board
+			WHERE truck_license_plate_number =#{truck_license_plate_number} and truck_cost_type_id='XANGDAU' AND cost_track_board_type = 'TRUCK'
+			AND month(action_date AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time')= MONTH(@date)
+			AND year(action_date AT TIME ZONE 'UTC' AT TIME ZONE 'SE Asia Standard Time')= YEAR(@date)
+		) AS a
+		GROUP BY day
+		
+		SELECT * FROM @time
+		ORDER BY day asc
+		
+		-- Tính tổng tháng này
+		
+		DECLARE @totalQuantity decimal(19,2), @totalDistance decimal(19,2), @quota decimal(19,4) , @doRatio decimal(20,4)
+		
+		SELECT @totalQuantity = ISNULL(SUM(quantity),0), @totalDistance = ISNULL(SUM(distance),0) FROM @time
+		
+		SELECT @quota = ISNULL(quota,0), @doRatio = ISNULL(DO_ratio,0)
+		FROM truck
+		WHERE license_plate_number = #{truck_license_plate_number}
+		
+		DECLARE @gasFollowGps decimal(19,2), @gasDoRatio decimal(19,2), @psDifferenceInMonth decimal(19,2), @psDifferenceInMonthBefore decimal(19,2)
+		SET @gasFollowGps = ROUND(@totalDistance * @quota,0)
+		SET @gasDoRatio = ROUND(@gasFollowGps * @doRatio,0)
+		SET @psDifferenceInMonth = @gasFollowGps + @gasDoRatio - @totalQuantity
+		SET @psDifferenceInMonthBefore = (SELECT ISNULL(tmfd.final_do,0) FROM truck_monthly_final_do tmfd 
+		WHERE tmfd.month = DATEPART(MONTH, DATEADD(MONTH, -1,  datefromparts(#{year}, #{month}, 1))) AND tmfd.year = DATEPART(YEAR, DATEADD(MONTH, -1,  datefromparts(#{year}, #{month}, 1)))
+		AND tmfd.truck_license_plate_number = #{truck_license_plate_number})
+		
+		-- Tính tổng và so sánh với tháng trước
+		SELECT @totalQuantity AS total_quantity , @totalDistance AS total_distance,  @quota AS quota,
+				@gasFollowGps AS gas_follow_gps, @gasDoRatio AS do_ratio,
+				@psDifferenceInMonth AS ps_difference_in_month,
+				ISNULL(@psDifferenceInMonthBefore,0) AS ps_difference_in_month_before,
+				@psDifferenceInMonth + ISNULL(@psDifferenceInMonthBefore,0) AS difference
+
+    </select>
+    
+    <resultMap id="result_1" type="com.ceti.wholesale.dto.GasSettlementDto">
+        <result property="day" column="day"/>
+        <result property="quantity" column="quantity"/>
+        <result property="distance" column="distance"/>
+        <result property="truckLicensePlateNumber" column="truck_license_plate_number"/>
+    </resultMap>
+    
+    <resultMap id="result_2" type="com.ceti.wholesale.dto.GasSettlementCustomDto">
+        <result property="totalQuantity" column="total_quantity"/>
+        <result property="totalDistance" column="total_distance"/>
+        <result property="quota" column="quota"/>
+        <result property="gasFollowGps" column="gas_follow_gps"/>
+        <result property="doRatio" column="do_ratio"/>
+        <result property="psDifferenceInMonth" column="ps_difference_in_month"/>  
+        <result property="psDifferenceInMonthBefore" column="ps_difference_in_month_before"/>     
+        <result property="difference" column="difference"/>     
+           
+    </resultMap>
+
+</mapper>

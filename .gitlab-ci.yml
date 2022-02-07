@@ -1,0 +1,39 @@
+stages:
+  - test
+  - build
+
+variables:
+  IMAGE_TAG: $CI_REGISTRY_IMAGE:0.0.1
+  IMAGE_BUILDER: $CI_REGISTRY_IMAGE:builder
+
+testjob:
+  stage: test
+  image: maven:3.6.3-jdk-11-slim
+  only:
+    - develop
+  script:
+    - echo "JUnit test"
+    - mvn clean package 
+  artifacts:
+    paths:
+      #- target/surefire-reports/TEST-*.xml
+      - target/site/jacoco/
+      - target/*.jar
+    reports:
+      junit:
+        - target/surefire-reports/TEST-*.xml
+
+buildjob:
+  stage: build
+  image: docker:19.03
+  services:
+    - docker:19.03.5-dind
+  only:
+    - develop
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login ${CI_REGISTRY_IMAGE} -u ${CI_REGISTRY_USER} --password-stdin
+    - docker pull $IMAGE_BUILDER || echo "Building builder from scratch"
+    - docker build --target=build --cache-from $IMAGE_BUILDER -t $IMAGE_BUILDER .
+    - docker build --cache-from $IMAGE_BUILDER -t $IMAGE_TAG .
+    - docker push $IMAGE_BUILDER
+    - docker push $IMAGE_TAG

@@ -1,0 +1,64 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.DeliveryRecordMapper">
+
+    <select id="getList" resultMap="result" parameterType="map">
+		
+		DECLARE @table_result TABLE(
+		    [name] nvarchar(255),
+		    weight decimal(19,2),
+		    unit nvarchar(32),
+		    quantity_import decimal(19,2),
+		    quantity_export decimal(19,2)
+		)
+		
+		INSERT INTO @table_result(name, weight,unit, quantity_import, quantity_export)
+		SELECT max(b.name), a.weight, N'BÌNH',  MAX(t.quantity_import), MAX(t.quantity_export)
+		FROM product a 
+		JOIN brand b ON a.brand_id=b.id 
+		LEFT JOIN (
+		    SELECT b.id, p.weight, ISNULL(SUM(g.in_quantity),0) AS quantity_import, ISNULL(SUM(g.out_quantity),0) AS quantity_export
+		    FROM goods_in_out g
+		    INNER JOIN product p ON g.product_id = p.id AND g.factory_id = p.factory_id
+		    INNER JOIN brand b ON p.brand_id = b.id
+		    WHERE g.voucher_id = #{voucher_id} AND p.[type] = 'GAS'
+		    GROUP BY b.id, p.weight
+		) t ON b.id = t.id AND t.weight = a.weight
+		WHERE a.[type]='GAS' AND is_active = 1 AND factory_id= #{factory_id}
+		GROUP BY b.id, a.weight
+		
+		INSERT INTO @table_result(name, unit)
+		SELECT N'Gas dư bình GĐ', N'Kg'
+		
+		INSERT INTO @table_result(name, unit)
+		SELECT N'Gas dư bình BM', N'Kg'
+		
+		INSERT INTO @table_result(name, unit)
+		SELECT N'Gas dư bình NG', N'Kg'
+		
+		/*Thêm vỏ*/
+		INSERT INTO @table_result(name, weight,unit, quantity_import, quantity_export)
+		SELECT N'Vỏ', a.cylinder_category, N'Vỏ', ISNULL(SUM(t.in_quantity),0), ISNULL(SUM(t.out_quantity),0)
+		FROM product a 
+		LEFT JOIN (
+			SELECT * FROM goods_in_out g
+			WHERE g.voucher_id = #{voucher_id} AND g.product_type='VO' AND g.factory_id= #{factory_id}
+		) t ON a.id = t.product_id AND a.factory_id = t.factory_id
+		WHERE a.[type] = 'VO' AND a.factory_id= #{factory_id}
+		GROUP BY a.cylinder_category  
+		
+		SELECT * from @table_result
+		ORDER BY unit,name, weight
+
+    </select>
+    
+    <resultMap id="result" type="com.ceti.wholesale.dto.DeliveryRecordDto">
+        <result property="name" column="name"/>
+        <result property="weight" column="weight"/>
+        <result property="unit" column="unit"/>
+        <result property="quantityImport" column="quantity_import"/>
+        <result property="quantityExport" column="quantity_export"/>
+    </resultMap>
+
+</mapper>

@@ -1,0 +1,69 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.TargetProductionMapper">
+	<sql id="filter">
+		<where>
+			<if test="monthFrom != null and yearFrom != null ">
+				AND (DATEFROMPARTS(tp.year,tp.month,15) >= DATEFROMPARTS(#{yearFrom},#{monthFrom},1))
+			</if>
+			<if test="monthTo != null and yearTo != null ">
+				AND (DATEFROMPARTS(tp.year,tp.month,15) &lt;= DATEFROMPARTS(#{yearTo},#{monthTo},30))
+			</if>
+			<if test="customerCode != null">
+				AND tp.customer_code LIKE CONCAT('%', #{customerCode}, '%') 
+			</if>
+			<if test="customerFullName != null">
+				AND c.name LIKE CONCAT('%', #{customerFullName}, '%') 
+			</if>
+		</where>
+	</sql>
+
+    <select id="getList" resultMap="result" parameterType="map">
+	    SELECT DISTINCT
+	    	c.id AS customer_id,
+			tp.customer_code,
+			tp.quantity,
+			tp.create_at,
+			tp.create_by,
+			tp.month,
+			tp.year,
+			tp.discount,
+			tp.weight_discount,
+			tp.quantity_without_discount,
+		    tp.customer_name
+		FROM 
+			target_production tp
+		LEFT JOIN
+			customer c ON tp.customer_code = c.code and tp.customer_name = c.name
+		<include refid="filter"></include>
+		ORDER BY tp.year DESC,tp.month DESC
+		OFFSET #{offset} ROWS FETCH NEXT #{size} ROWS ONLY
+    </select>
+    
+    <resultMap id="result" type="com.ceti.wholesale.dto.TargetProductionDto">
+        <result property="customerId" column="customer_id"/>
+        <result property="customerFullName" column="customer_full_name"/>
+        <result property="quantity" column="quantity"/>
+        <result property="createAt" column="create_at"/>
+        <result property="createBy" column="create_by"/>
+        <result property="month" column="month"/>
+        <result property="year" column="year"/>
+        <result property="customerName" column="customer_name"/>
+        <result property="customerCode" column="customer_code"/>
+        <result property="discount" column="discount"/>
+        <result property="weightDiscount" column="weight_discount"/>
+        <result property="quantityWithoutDiscount" column="quantity_without_discount"/>
+    </resultMap>
+    
+    
+    
+    <select id="countList" resultType="long">
+		SELECT COUNT(tp.customer_code)
+		FROM 
+			target_production tp LEFT JOIN customer c ON tp.customer_code = c.code and tp.customer_name = c.name
+		<include refid="filter"></include>
+		 
+    </select>
+
+</mapper>

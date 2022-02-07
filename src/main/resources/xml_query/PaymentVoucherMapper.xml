@@ -1,0 +1,135 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.PaymentVoucherMapper">
+    <sql id="filter">
+		<where>
+			<if test="voucher_at_from != null">
+				AND pv.voucher_at <![CDATA[>=]]> #{voucher_at_from}
+			</if>
+			<if test="voucher_at_to != null">
+				AND pv.voucher_at <![CDATA[<=]]>  #{voucher_at_to}
+			</if>
+			<if test="customer_id != null">
+				AND pv.customer_id = #{customer_id}
+			</if>
+			<if test="sold_voucher_no != null">
+				AND pv.sold_voucher_no = #{sold_voucher_no}
+			</if>
+			<if test="sold_delivery_voucher_no != null">
+				AND pv.sold_delivery_voucher_no = #{sold_delivery_voucher_no}
+			</if>
+			<if test="factory_id != null">
+				AND pv.factory_id = #{factory_id}
+			</if>
+			<if test="voucher_code != null">
+				AND pv.voucher_code LIKE CONCAT('%', #{voucher_code}, '%')
+			</if>
+		</where>
+	</sql>
+
+    <select id="getList" resultMap="result" parameterType="map">
+	    SELECT
+			pv.*,
+			c1.name as company_name,
+			c2.name as customer_name,
+			c2.code AS customer_code,
+			td.full_name AS truck_driver_full_name
+		FROM payment_voucher pv
+		LEFT JOIN company c1 ON pv.company_id = c1.id
+		LEFT JOIN customer c2 ON pv.customer_id = c2.id
+		LEFT JOIN truck_driver td ON pv.truck_driver_id = td.id
+		<if test="product_id != null">
+			JOIN (select distinct voucher_id from goods_in_out where product_id =#{product_id}) goods_in_out on goods_in_out.voucher_id = pv.id
+		</if>
+		<include refid="filter"></include>
+		${pagingStr}
+    </select>
+    
+    <select id="getListReturnProducts" resultMap="resultProduct,totalResult" parameterType="map">
+    	DECLARE @result TABLE(
+    		nxe_in_quantity decimal(19,2),
+    		product_id varchar(32),
+    		product_name nvarchar(255),
+    		unit nvarchar(32),
+    		weight decimal(19,2),
+    		type varchar(32)
+    	)
+    	
+    	INSERT INTO @result(nxe_in_quantity,product_id, product_name, unit, weight, type)
+		SELECT  SUM(ISNULL(in_quantity,0)) nxe_in_quantity, product_id, MAX(p.name) AS product_name, MAX(p.unit) AS unit, MAX(p.cylinder_category) AS weight, 'NKXE' AS type
+		FROM  sold_delivery_voucher sdv
+		LEFT JOIN payment_voucher pv on sdv.payment_voucher_id=pv.id
+		LEFT JOIN goods_in_out gio on pv.id=gio.voucher_id
+		LEFT JOIN product p on p.id=gio.product_id and p.factory_id=gio.factory_id
+		WHERE sdv.delivery_voucher_no= #{delivery_voucher_no} and sdv.factory_id= #{factory_id} AND product_id is not null
+		GROUP BY product_id
+		
+		SELECT * FROM @result
+		
+		SELECT SUM(ISNULL(nxe_in_quantity,0)) AS total_goods
+		FROM @result
+		
+		
+    </select>
+    
+    <resultMap id="resultProduct" type="com.ceti.wholesale.model.GoodsInOut">
+        <result property="productId" column="product_id"/>
+        <result property="productName" column="product_name"/>
+        <result property="nxeInQuantity" column="nxe_in_quantity"/>
+        <result property="unit" column="unit"/>
+        <result property="weight" column="weight"/>
+        <result property="type" column="type"/>
+    </resultMap>
+    
+    <resultMap id="totalResult" type="com.ceti.wholesale.dto.ReturnVoucherTotalGoodsDto">
+        <result property="totalGoods" column="total_goods"/>
+    </resultMap>
+
+    <resultMap id="result" type="com.ceti.wholesale.dto.PaymentVoucherDto">
+        <result property="id" column="id"/>
+        <result property="no" column="no"/>
+		<result property="soldVoucherNo" column="sold_voucher_no"/>
+		<result property="voucherId" column="voucher_id"/>
+		<result property="customerId" column="customer_id"/>
+		<result property="soldDeliveryVoucherNo" column="sold_delivery_voucher_no"/>
+        <result property="voucherCode" column="voucher_code"/>
+        <result property="voucherAt" column="voucher_at"/>
+		<result property="totalPaymentReceived" column="total_payment_received"/>
+		<result property="totalGoodsReturn" column="total_goods_return"/>
+		<result property="note" column="note"/>
+		<result property="createdByFullName" column="created_by_full_name"/>
+		<result property="createdAt" column="created_at"/>
+		<result property="updateByFullName" column="update_by_full_name"/>
+		<result property="updateAt" column="update_at"/>
+		<result property="payer" column="payer"/>
+		<result property="factoryId" column="factory_id"/>
+		<result property="truckLicensePlateNumber" column="truck_license_plate_number"/>
+		<result property="truckDriverId" column="truck_driver_id"/>
+		<result property="truckDriverFullName" column="truck_driver_full_name"/>
+        <result property="companyId" column="company_id"/>
+        <association property="company" javaType="com.ceti.wholesale.dto.CompanyDto">
+        	<result property="name" column="company_name"/>
+			<result property="id" column="company_id"/>
+        </association>
+        <association property="customer" javaType="com.ceti.wholesale.dto.CustomerDto">
+			<result property="code" column="customer_code"/>
+			<result property="name" column="customer_name"/>
+			<result property="id" column="customer_id"/>
+        </association>
+		 <association property="truckDriver" javaType="com.ceti.wholesale.dto.TruckDriverDto">
+			<result property="fullName" column="truck_driver_full_name"/>
+			 <result property="id" column="truck_driver_id"/>
+		</association>
+    </resultMap>
+
+    <select id="countList" resultType="long">
+		SELECT
+			COUNT(*)
+		FROM payment_voucher pv
+		<if test="product_id != null">
+			JOIN (select distinct voucher_id from goods_in_out where product_id =#{product_id}) goods_in_out on goods_in_out.voucher_id = pv.id
+		</if>
+		<include refid="filter"></include>
+    </select>
+</mapper>

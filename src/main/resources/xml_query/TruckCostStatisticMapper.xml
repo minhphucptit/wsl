@@ -1,0 +1,54 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.TruckCostStatisticMapper">
+	<sql id="filter">
+		<where>
+			tctb.cost_track_board_type = 'TRUCK'
+			<if test="action_date_from != null">
+				AND tctb.action_date <![CDATA[>=]]> #{action_date_from}
+			</if>
+			<if test="action_date_to != null">
+				AND tctb.action_date <![CDATA[<=]]> #{action_date_to}
+			</if>
+			<if test="factory_id != null">
+				AND tctb.factory_id = #{factory_id}
+			</if>
+			<if test="truck_license_plate_number != null">
+				AND tctb.truck_license_plate_number LIKE CONCAT('%', #{truck_license_plate_number}, '%')
+			</if>
+		</where>
+	</sql>
+
+	<select id="getList" resultMap="result" parameterType="map">
+		SELECT
+		MAX(f.name) AS factory_name,
+	   	<if test="type =='truck_driver_id'" >
+		   MAX(truck_driver.full_name) as order_by,
+		</if>
+		<if test="type =='truck_license_plate_number'" >
+			tctb.truck_license_plate_number as order_by,
+		</if>
+		tct.name AS truck_cost_type_name,
+		sum(tctb.total) AS cost
+
+		FROM cost_track_board tctb
+		LEFT JOIN factory f ON tctb.factory_id = f.id
+		LEFT JOIN truck_cost_type tct ON tctb.truck_cost_type_id = tct.id
+		<if test="type =='truck_driver_id'" >
+			LEFT JOIN truck_driver on tctb.truck_driver_id = truck_driver.id
+		</if>
+		<include refid="filter"></include>
+		GROUP BY tctb.${type}, tct.name
+		HAVING sum(tctb.total) >0
+		ORDER BY tctb.${type}
+	</select>
+
+	<resultMap id="result" type="com.ceti.wholesale.dto.TruckCostStatisticDto">
+		<result property="type" column='order_by'/>
+		<result property="cost" column="cost"/>
+		<result property="truckCostTypeName" column="truck_cost_type_name"/>
+		<result property="factoryName" column="factory_name"/>
+	</resultMap>
+
+</mapper>

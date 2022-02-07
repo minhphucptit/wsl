@@ -1,0 +1,16 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.CustomerProductPriceMapper">
+    <update id="updateCustomerProductPrice"  parameterType ="map">
+            update customer_product_price set price = price + #{price} 
+            where factory_id = #{factory_id} 
+                <if test="list_customer_id != null"> 
+                    and (customer_id IN (select * from string_split(#{list_customer_id}, ','))) 
+                </if>
+                <if test="list_product_id != null"> 
+                    and (product_id IN (select * from string_split(#{list_product_id}, ','))) 
+                </if>
+    </update>
+
+</mapper>

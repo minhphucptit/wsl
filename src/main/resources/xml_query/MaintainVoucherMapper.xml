@@ -1,0 +1,113 @@
+<?xml version = "1.0" encoding = "UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ceti.wholesale.mapper.MaintainVoucherMapper">
+    <sql id="filter">
+		<where>
+			<if test="voucher_at_from != null">
+				AND mv.voucher_at <![CDATA[>=]]> #{voucher_at_from}
+			</if>
+			<if test="voucher_at_to != null">
+				AND mv.voucher_at <![CDATA[<=]]>  #{voucher_at_to}
+			</if>
+			<if test="company_id != null">
+				AND mv.company_id = #{company_id}
+			</if>
+			<if test="id != null">
+				AND mv.id = #{id}
+			</if>
+			<if test="customer_id != null">
+				AND mv.customer_id = #{customer_id}
+			</if>
+			<if test="truck_driver_id != null">
+				AND mv.truck_driver_id = #{truck_driver_id}
+			</if>
+			<if test="truck_license_plate_number != null">
+				AND mv.truck_license_plate_number = #{truck_license_plate_number}
+			</if>
+			<if test="factory_id != null">
+				AND mv.factory_id = #{factory_id}
+			</if>
+		</where>
+	</sql>
+
+    <select id="getList" resultMap="result" parameterType="map">
+	    SELECT
+			mv.*,
+			c1.name as company_name,
+			c2.name as customer_name,
+			c2.code AS customer_code,
+			td.full_name AS truck_driver_full_name,
+			salesman.full_name AS salesman_full_name
+		FROM maintain_voucher mv
+		LEFT JOIN company c1 ON mv.company_id = c1.id
+		LEFT JOIN customer c2 ON mv.customer_id = c2.id
+		LEFT JOIN truck_driver td ON mv.truck_driver_id = td.id
+		LEFT JOIN salesman ON mv.salesman_id = salesman.id
+		<include refid="joinGoodInOut"></include>
+		<include refid="filter"></include>
+		${pagingStr}
+    </select>
+
+    <resultMap id="result" type="com.ceti.wholesale.dto.MaintainVoucherDto">
+        <result property="id" column="id"/>
+        <result property="no" column="no"/>
+        <result property="voucherCode" column="voucher_code"/>
+        <result property="voucherAt" column="voucher_at"/>
+        <result property="companyId" column="company_id"/>
+        <result property="customerId" column="customer_id"/>
+        <result property="salesmanId" column="salesman_id"/>
+        <result property="truckDriverId" column="truck_driver_id"/>
+        <result property="truckLicensePlateNumber" column="truck_license_plate_number"/>
+		<result property="type" column="type"/>
+        <result property="totalGoods" column="total_goods"/>
+        <result property="note" column="note"/>
+	 	<result property="createdByFullName" column="created_by_full_name"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updateByFullName" column="update_by_full_name"/>
+        <result property="updateAt" column="update_at"/>
+        <result property="factoryId" column="factory_id"/>
+        <result property="truckDriverFullName" column="truck_driver_full_name"/>
+        <result property="salesmanFullName" column="salesman_full_name"/>
+        <association property="company" javaType="com.ceti.wholesale.dto.CompanyDto">
+        	<result property="name" column="company_name"/>
+			<result property="id" column="company_id"/>
+        </association>
+        <association property="customer" javaType="com.ceti.wholesale.dto.CustomerDto">
+			<result property="code" column="customer_code"/>
+			<result property="name" column="customer_name"/>
+			<result property="name" column="customer_id"/>
+        </association>
+		 <association property="truckDriver" javaType="com.ceti.wholesale.dto.TruckDriverDto">
+			<result property="fullName" column="truck_driver_full_name"/>
+			 <result property="id" column="truck_driver_id"/>
+		</association>
+		 <association property="salesman" javaType="com.ceti.wholesale.dto.SalesmanDto">
+			<result property="fullName" column="salesman_full_name"/>
+			 <result property="id" column="salesman_id"/>
+		 </association>
+    </resultMap>
+	<sql id="joinGoodInOut">
+		<if test="goods_in_out_type !=null or product_id != null">
+			JOIN (select distinct voucher_id from goods_in_out
+			<where>
+				<if test="goods_in_out_type != null">
+					AND [type] =#{goods_in_out_type}
+				</if>
+				<if test="product_id != null">
+					AND product_id =#{product_id}
+				</if>
+			</where>
+			)
+			goods_in_out on goods_in_out.voucher_id = mv.id
+		</if>
+	</sql>
+
+    <select id="countList" resultType="long">
+		SELECT
+			COUNT(*)
+		FROM maintain_voucher mv
+		<include refid="joinGoodInOut"></include>
+		<include refid="filter"></include>
+    </select>
+</mapper>
